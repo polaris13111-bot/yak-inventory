@@ -270,7 +270,7 @@ function BulkForm({ products }: { products: Product[] }) {
       }
       colMap.forEach((field, i) => {
         if (field && cells[i] !== undefined && cells[i] !== '') {
-          (row as Record<string, string>)[field] = cells[i]
+          (row as unknown as Record<string, string>)[field] = cells[i]
         }
       })
       // 날짜 기본값

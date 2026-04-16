@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react'
-import { Settings2, Package, Plus, Trash2, Pencil, Check, X, ChevronDown } from 'lucide-react'
+import { Settings2, Package, Plus, Trash2, Pencil, Check, X } from 'lucide-react'
 import { getProducts, createProduct, updateProduct, deleteProduct } from '../api'
 import type { Product } from '../types'
 

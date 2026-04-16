@@ -4,7 +4,7 @@ import dayjs from 'dayjs'
 import { getOrders, updateOrder, deleteOrder, getInventory } from '../api'
 import type { Order, InventoryItem } from '../types'
 import { useAdmin } from '../context/AdminContext'
-import { exportOrders, exportInventory, exportFull } from '../utils/exportXlsx'
+import { exportOrders, exportInventory } from '../utils/exportXlsx'
 
 type ViewTab   = 'orders' | 'inventory'
 type GroupBy   = 'all' | 'month' | 'week' | 'day'

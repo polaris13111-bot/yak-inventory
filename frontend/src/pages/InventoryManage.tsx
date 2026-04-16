@@ -243,7 +243,7 @@ function BulkForm({
             const v = cells[idx].toLowerCase()
             row.type = (v.includes('반품') || v === 'return') ? 'return' : 'normal'
           } else {
-            ;(row as Record<string, string>)[field] = cells[idx]
+            ;(row as unknown as Record<string, string>)[field] = cells[idx]
           }
         }
       })
