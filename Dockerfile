@@ -2,7 +2,7 @@
 FROM node:20-alpine AS frontend-build
 WORKDIR /frontend
 COPY frontend/package*.json ./
-RUN npm ci
+RUN npm install --legacy-peer-deps
 COPY frontend/ .
 # 프론트 + 백엔드가 같은 origin → 상대 경로 사용
 RUN VITE_API_URL="" npm run build
