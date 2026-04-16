@@ -1,0 +1,638 @@
+import { useState, useEffect, useRef, Fragment } from 'react'
+import { PackagePlus, RotateCcw, CheckCircle, ChevronDown, ClipboardPaste, Upload, Trash2, AlertCircle } from 'lucide-react'
+import dayjs from 'dayjs'
+import * as XLSX from 'xlsx'
+import { getProducts, getInventory, createInventory, createInventoryBulk } from '../api'
+import type { Product, InventoryItem } from '../types'
+import { autoMatch, findCandidates } from '../utils/matcher'
+import type { MatchResult } from '../utils/matcher'
+import ProductSearch from '../components/ProductSearch'
+
+// ─── 대량 입력 행 타입 ────────────────────────────────────
+interface BulkInvRow {
+  date: string
+  productName: string   // 원본 상품명 (매칭용)
+  quantity: string
+  type: 'normal' | 'return'
+  notes: string
+  _resolved?: Product
+  _candidates?: MatchResult[]
+  _error?: string
+}
+
+const EMPTY_INV_ROW = (): BulkInvRow => ({
+  date: dayjs().format('M.DD'),
+  productName: '',
+  quantity: '1',
+  type: 'normal',
+  notes: '',
+})
+
+// ─── 단일 입력 폼 ─────────────────────────────────────────
+function SingleForm({
+  products,
+  onAdded,
+}: {
+  products: Product[]
+  onAdded: () => void
+}) {
+  const [type, setType]       = useState<'normal' | 'return'>('normal')
+  const [product_id, setPid]  = useState<number | ''>('')
+  const [date, setDate]       = useState(dayjs().format('M.DD'))
+  const [qty, setQty]         = useState('1')
+  const [notes, setNotes]     = useState('')
+  const [submitted, setSubmitted] = useState(false)
+  const [error, setError]     = useState('')
+
+  const handleSubmit = async (e: React.FormEvent) => {
+    e.preventDefault()
+    if (!product_id) return
+    setError('')
+    try {
+      await createInventory({
+        date,
+        product_id: product_id as number,
+        quantity: Number(qty),
+        type,
+        notes,
+      })
+      setSubmitted(true)
+      onAdded()
+      setTimeout(() => { setSubmitted(false); setPid(''); setQty('1'); setNotes('') }, 2000)
+    } catch {
+      setError('등록에 실패했습니다. 다시 시도해주세요.')
+    }
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 입고 유형 탭 */}
+      <div className="flex gap-2">
+        <button onClick={() => setType('normal')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+            ${type === 'normal' ? 'bg-green-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+          <PackagePlus size={15} />정상 입고
+        </button>
+        <button onClick={() => setType('return')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+            ${type === 'return' ? 'bg-amber-500 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+          <RotateCcw size={15} />반품 입고
+        </button>
+      </div>
+
+      {type === 'return' && (
+        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
+          반품 입고는 재고에 더해지지만 블랙야크 공유 시 별도 표시됩니다.
+        </div>
+      )}
+
+      {submitted && (
+        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700">
+          <CheckCircle size={16} />
+          <span className="text-sm font-medium">입고가 등록되었습니다!</span>
+        </div>
+      )}
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-700 text-sm">{error}</div>
+      )}
+
+      <form onSubmit={handleSubmit}
+        className="bg-white rounded-xl border border-slate-100 shadow-sm p-5 space-y-4">
+
+        <div className="grid grid-cols-2 gap-3">
+          <div>
+            <label className="text-xs font-medium text-slate-500 block mb-1">입고 날짜</label>
+            <input value={date} onChange={e => setDate(e.target.value)}
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <div>
+            <label className="text-xs font-medium text-slate-500 block mb-1">수량</label>
+            <input type="number" value={qty} onChange={e => setQty(e.target.value)} min="1"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">제품</label>
+          <div className="relative">
+            <select value={product_id} onChange={e => setPid(e.target.value ? Number(e.target.value) : '')}
+              className="w-full appearance-none border border-slate-200 rounded-lg px-3 py-2.5 text-sm
+                         focus:outline-none focus:ring-2 focus:ring-blue-400 bg-white">
+              <option value="">제품 선택</option>
+              {products.map(p => (
+                <option key={p.id} value={p.id}>{p.name} / {p.color} / {p.size}</option>
+              ))}
+            </select>
+            <ChevronDown size={14} className="absolute right-3 top-3.5 text-slate-400 pointer-events-none" />
+          </div>
+        </div>
+
+        <div>
+          <label className="text-xs font-medium text-slate-500 block mb-1">메모</label>
+          <input value={notes} onChange={e => setNotes(e.target.value)}
+            placeholder={type === 'return' ? '반품 사유 입력' : '입고 메모'}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        </div>
+
+        <button type="submit" disabled={!product_id}
+          className={`w-full py-3 text-white font-semibold rounded-xl transition-colors disabled:bg-slate-200 disabled:text-slate-400
+            ${type === 'normal' ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
+          {type === 'normal' ? '정상 입고 등록' : '반품 입고 등록'}
+        </button>
+      </form>
+    </div>
+  )
+}
+
+// ─── 대량 입력 폼 ─────────────────────────────────────────
+function BulkForm({
+  products,
+  onAdded,
+}: {
+  products: Product[]
+  onAdded: () => void
+}) {
+  const [subMode, setSubMode]     = useState<'paste' | 'file'>('paste')
+  const [pasteText, setPasteText] = useState('')
+  const [rows, setRows]           = useState<BulkInvRow[]>([EMPTY_INV_ROW()])
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult]       = useState<{ ok: number; fail: number } | null>(null)
+  const fileRef = useRef<HTMLInputElement>(null)
+
+  // 제품 매칭
+  const matchProduct = (r: BulkInvRow): Pick<BulkInvRow, '_resolved' | '_candidates'> => {
+    if (!r.productName.trim()) return { _resolved: undefined, _candidates: undefined }
+    const auto = autoMatch(r.productName, products)
+    if (auto) return { _resolved: auto.product, _candidates: undefined }
+    const candidates = findCandidates(r.productName, products, 5, 25)
+    // fuzzy 100점이면 자동 매칭
+    if (candidates.length > 0 && candidates[0].score >= 100) {
+      return { _resolved: candidates[0].product, _candidates: undefined }
+    }
+    return { _resolved: undefined, _candidates: candidates }
+  }
+
+  const validateRows = (rawRows: BulkInvRow[]): BulkInvRow[] =>
+    rawRows.map(r => {
+      if (!r.date) return { ...r, _error: '날짜 필수', _resolved: undefined, _candidates: undefined }
+      if (!r.quantity || isNaN(Number(r.quantity)) || Number(r.quantity) < 1)
+        return { ...r, _error: '수량 오류', _resolved: undefined, _candidates: undefined }
+      return { ...r, _error: undefined, ...matchProduct(r) }
+    })
+
+  // 붙여넣기 파싱 — 발주 스프레드시트(14열) 또는 단순 상품명·수량 형식 모두 지원
+  const HEADER_MAP: Record<string, keyof BulkInvRow> = {
+    // 발주 스프레드시트 헤더
+    '발주일자': 'date', '발주일': 'date',
+    // 입고 전용 헤더
+    '날짜': 'date', '입고일': 'date', '입고일자': 'date',
+    // 상품명
+    '상품명': 'productName', '제품명': 'productName', '품명': 'productName',
+    '상  품  명': 'productName',
+    // 수량
+    '수량': 'quantity',
+    // 메모/유형
+    '메모': 'notes', '비고': 'notes', '반품사유': 'notes', '배송메모': 'notes',
+    '유형': 'type', '입고유형': 'type',
+  }
+
+  const parsePaste = (text: string): BulkInvRow[] => {
+    const lines = text.trim().split('\n').filter(l => l.trim())
+    if (lines.length === 0) return []
+
+    const firstCols = lines[0].split('\t').map(s => s.trim())
+    const firstVal  = firstCols[0].toLowerCase().replace(/\s+/g, '')
+    const isHeader  = !firstVal.match(/^\d+\.\d+$/) && !firstVal.match(/^\d{4}-\d{2}-\d{2}$/) && isNaN(Number(firstVal))
+
+    let colMap: (keyof BulkInvRow | null)[]
+    if (isHeader) {
+      colMap = firstCols.map(h => HEADER_MAP[h.trim()] ?? HEADER_MAP[h.toLowerCase().replace(/\s+/g, '')] ?? null)
+    } else {
+      // 헤더 없을 때: 발주 스프레드시트 14열 기본 순서 (상품명=12, 수량=13)
+      colMap = [
+        'date',        // 0: 발주일자
+        null,          // 1: 주문일자
+        null,          // 2: 제품보관
+        null,          // 3: 매출MALL
+        null,          // 4: 주문자명
+        null,          // 5: 송하인폰
+        null,          // 6: 수령인
+        null,          // 7: 수령인휴대폰
+        null,          // 8: 연락처
+        null,          // 9: 우편번호
+        null,          // 10: 주소
+        null,          // 11: 배송메모
+        'productName', // 12: 상품명
+        'quantity',    // 13: 수량
+      ]
+    }
+
+    const dataLines = isHeader ? lines.slice(1) : lines
+    return dataLines.map(line => {
+      const cells = line.split('\t').map(s => s.trim())
+      const row: BulkInvRow = {
+        date: dayjs().format('M.DD'),
+        productName: '',
+        quantity: '1',
+        type: 'normal',
+        notes: '',
+      }
+      colMap.forEach((field, idx) => {
+        if (field && cells[idx] !== undefined && cells[idx] !== '') {
+          if (field === 'type') {
+            const v = cells[idx].toLowerCase()
+            row.type = (v.includes('반품') || v === 'return') ? 'return' : 'normal'
+          } else {
+            ;(row as Record<string, string>)[field] = cells[idx]
+          }
+        }
+      })
+      return row
+    }).filter(r => r.productName)
+  }
+
+  const handlePaste = () => {
+    const parsed = parsePaste(pasteText)
+    if (parsed.length === 0) return
+    setRows(validateRows(parsed))
+    setPasteText('')
+  }
+
+  const handleFile = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0]
+    if (!file) return
+    const reader = new FileReader()
+    reader.onload = evt => {
+      const wb = XLSX.read(evt.target?.result, { type: 'binary' })
+      const ws = wb.Sheets[wb.SheetNames[0]]
+      const data: string[][] = XLSX.utils.sheet_to_json(ws, { header: 1, defval: '' }) as string[][]
+      const raw = data.map(r => r.map(v => String(v ?? '').trim()).join('\t')).join('\n')
+      const parsed = parsePaste(raw)
+      setRows(validateRows(parsed))
+      if (fileRef.current) fileRef.current.value = ''
+    }
+    reader.readAsBinaryString(file)
+  }
+
+  const updateRow = (i: number, key: keyof BulkInvRow, val: string) => {
+    setRows(prev => {
+      const next = [...prev]
+      next[i] = { ...next[i], [key]: val }
+      if (key === 'productName') {
+        next[i] = { ...next[i], ...matchProduct(next[i]) }
+      }
+      return next
+    })
+  }
+
+  const selectCandidate = (i: number, match: MatchResult) => {
+    setRows(prev => {
+      const next = [...prev]
+      next[i] = {
+        ...next[i],
+        productName: `${match.product.name} ${match.product.color} ${match.product.size}`,
+        _resolved:   match.product,
+        _candidates: undefined,
+        _error:      undefined,
+      }
+      return next
+    })
+  }
+
+  const removeRow = (i: number) =>
+    setRows(prev => prev.length === 1 ? [EMPTY_INV_ROW()] : prev.filter((_, idx) => idx !== i))
+
+  const addRow = () => setRows(prev => [...prev, EMPTY_INV_ROW()])
+
+  const handleSubmit = async () => {
+    const valid = rows.filter(r => r._resolved)
+    if (valid.length === 0) return
+    setSubmitting(true)
+    try {
+      const payload = valid.map(r => ({
+        date: r.date,
+        product_id: r._resolved!.id,
+        quantity: Number(r.quantity),
+        type: r.type,
+        notes: r.notes,
+      }))
+      const res = await createInventoryBulk(payload)
+      setResult({ ok: res.ok, fail: res.fail.length })
+      onAdded()
+      if (res.fail.length === 0) setTimeout(() => { setRows([EMPTY_INV_ROW()]); setResult(null) }, 2500)
+    } catch {
+      setResult({ ok: 0, fail: valid.length })
+    }
+    setSubmitting(false)
+  }
+
+  const validCount     = rows.filter(r => r._resolved).length
+  const errorCount     = rows.filter(r => r._error).length
+  const candidateCount = rows.filter(r => !r._resolved && !r._error && r._candidates !== undefined).length
+
+  return (
+    <div className="space-y-4">
+      {/* 서브모드 탭 */}
+      <div className="flex gap-2">
+        <button onClick={() => setSubMode('paste')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+            ${subMode === 'paste' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+          <ClipboardPaste size={15} />엑셀 붙여넣기
+        </button>
+        <button onClick={() => setSubMode('file')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+            ${subMode === 'file' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+          <Upload size={15} />파일 업로드
+        </button>
+      </div>
+
+      {subMode === 'paste' && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 space-y-3">
+          <div>
+            <p className="text-xs font-medium text-slate-600 mb-0.5">스프레드시트 데이터를 붙여넣으세요</p>
+            <p className="text-xs text-slate-400">
+              열 순서: <span className="font-mono bg-slate-50 px-1 rounded">상품명 · 수량 · 날짜 · 메모</span>
+              &nbsp;또는 헤더 포함하여 복사해도 됩니다
+            </p>
+          </div>
+          <textarea
+            value={pasteText}
+            onChange={e => setPasteText(e.target.value)}
+            onPaste={e => {
+              const data = e.clipboardData.getData('text')
+              setTimeout(() => {
+                const parsed = parsePaste(data)
+                if (parsed.length > 0) { setRows(validateRows(parsed)); setPasteText('') }
+              }, 0)
+            }}
+            placeholder="여기에 Ctrl+V로 붙여넣기"
+            rows={4}
+            className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-xs font-mono focus:outline-none focus:ring-2 focus:ring-blue-400 resize-none"
+          />
+          {pasteText && (
+            <button onClick={handlePaste}
+              className="px-4 py-2 bg-blue-600 text-white text-sm rounded-lg hover:bg-blue-700 transition-colors">
+              파싱하기
+            </button>
+          )}
+        </div>
+      )}
+
+      {subMode === 'file' && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4">
+          <label className="flex flex-col items-center gap-3 p-8 border-2 border-dashed border-slate-200 rounded-lg cursor-pointer hover:border-blue-400 hover:bg-blue-50/30 transition-colors">
+            <Upload size={28} className="text-slate-300" />
+            <div className="text-center">
+              <p className="text-sm font-medium text-slate-600">Excel 파일을 선택하거나 드래그하세요</p>
+              <p className="text-xs text-slate-400 mt-1">.xlsx, .xls 지원 · 열 순서: 상품명 · 수량 · 날짜 · 메모</p>
+            </div>
+            <input ref={fileRef} type="file" accept=".xlsx,.xls" onChange={handleFile} className="hidden" />
+          </label>
+        </div>
+      )}
+
+      {/* 그리드 */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+        <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <span className="text-sm font-semibold text-slate-700">{rows.length}행</span>
+            {validCount > 0     && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">{validCount}개 등록 가능</span>}
+            {candidateCount > 0 && <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">{candidateCount}개 수동 매칭 필요</span>}
+            {errorCount > 0     && <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">{errorCount}개 오류</span>}
+          </div>
+          <button onClick={addRow} className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors">
+            + 행 추가
+          </button>
+        </div>
+
+        <div className="overflow-auto">
+          <table className="w-full text-xs border-collapse" style={{ minWidth: '700px' }}>
+            <thead>
+              <tr className="bg-slate-50 border-b border-slate-200">
+                <th className="px-2 py-2 text-left font-medium text-slate-500 w-8">#</th>
+                <th className="px-2 py-2 text-left font-medium text-slate-500 w-20">날짜</th>
+                <th className="px-2 py-2 text-left font-medium text-slate-500">상품명</th>
+                <th className="px-2 py-2 text-left font-medium text-slate-500 w-14">수량</th>
+                <th className="px-2 py-2 text-left font-medium text-slate-500 w-20">유형</th>
+                <th className="px-2 py-2 text-left font-medium text-slate-500 w-32">메모</th>
+                <th className="px-2 py-2 w-8"></th>
+              </tr>
+            </thead>
+            <tbody className="divide-y divide-slate-100">
+              {rows.map((row, i) => {
+                const hasCandidates = !row._resolved && !row._error && row._candidates !== undefined
+                return (
+                  <Fragment key={i}>
+                    <tr className={
+                      row._error    ? 'bg-red-50' :
+                      row._resolved ? 'bg-green-50/40' :
+                      hasCandidates ? 'bg-amber-50/40' : 'bg-white'
+                    }>
+                      <td className="px-2 py-1.5 text-slate-400 text-center">
+                        {row._resolved
+                          ? <span className="text-green-500">✓</span>
+                          : row._error
+                          ? <AlertCircle size={13} className="text-red-400 mx-auto" />
+                          : i + 1}
+                      </td>
+
+                      {/* 날짜 */}
+                      <td className="px-1 py-1">
+                        <input value={row.date} onChange={e => updateRow(i, 'date', e.target.value)}
+                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      </td>
+
+                      {/* 상품명 + 매칭 결과 */}
+                      <td className="px-1 py-1">
+                        <div className="flex flex-col gap-0.5">
+                          <input value={row.productName} onChange={e => updateRow(i, 'productName', e.target.value)}
+                            placeholder="상품명 입력 또는 붙여넣기"
+                            className={`w-full px-2 py-1 rounded border text-xs focus:outline-none focus:ring-1 ${
+                              row._error    ? 'border-red-300 bg-red-50 focus:ring-red-400' :
+                              row._resolved ? 'border-green-300 bg-green-50/40 focus:ring-green-400' :
+                              hasCandidates ? 'border-amber-300 bg-amber-50/40 focus:ring-amber-400' :
+                              'border-slate-200 bg-white focus:ring-blue-400'
+                            }`} />
+                          {row._resolved && (
+                            <span className="text-[10px] text-green-700 font-medium px-1 truncate">
+                              → {row._resolved.name} / {row._resolved.color} / {row._resolved.size}
+                            </span>
+                          )}
+                        </div>
+                      </td>
+
+                      {/* 수량 */}
+                      <td className="px-1 py-1">
+                        <input type="number" value={row.quantity} onChange={e => updateRow(i, 'quantity', e.target.value)} min="1"
+                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      </td>
+
+                      {/* 유형 */}
+                      <td className="px-1 py-1">
+                        <select value={row.type} onChange={e => updateRow(i, 'type', e.target.value as 'normal' | 'return')}
+                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-400 appearance-none">
+                          <option value="normal">정상</option>
+                          <option value="return">반품</option>
+                        </select>
+                      </td>
+
+                      {/* 메모 */}
+                      <td className="px-1 py-1">
+                        <input value={row.notes} onChange={e => updateRow(i, 'notes', e.target.value)}
+                          placeholder="메모"
+                          className="w-full px-2 py-1 rounded border border-slate-200 bg-white text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
+                      </td>
+
+                      <td className="px-2 py-1.5 text-center">
+                        <button onClick={() => removeRow(i)} className="text-slate-300 hover:text-red-400 transition-colors">
+                          <Trash2 size={13} />
+                        </button>
+                      </td>
+                    </tr>
+
+                    {/* 후보 선택 */}
+                    {hasCandidates && row._candidates!.length > 0 && (
+                      <tr className="bg-amber-50/60 border-t border-amber-100">
+                        <td></td>
+                        <td colSpan={6} className="px-3 py-2.5">
+                          <p className="text-[10px] text-amber-700 font-semibold mb-2">
+                            자동 매칭 실패 — 후보에서 선택하세요:
+                          </p>
+                          <div className="flex flex-wrap gap-2">
+                            {row._candidates!.map((m, ci) => {
+                              const scoreColor = m.score >= 90 ? 'text-green-600 bg-green-50'
+                                : m.score >= 70 ? 'text-amber-600 bg-amber-50'
+                                : 'text-red-500 bg-red-50'
+                              const scoreLabel = m.score >= 90 ? '높음' : m.score >= 70 ? '중간' : '낮음'
+                              return (
+                                <button key={ci} onClick={() => selectCandidate(i, m)}
+                                  className="flex flex-col gap-1 px-3 py-2 bg-white border border-amber-200 rounded-lg hover:border-amber-400 hover:bg-amber-50 hover:shadow-sm transition-all text-left min-w-[120px]">
+                                  <div className="flex items-center gap-1.5">
+                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${scoreColor}`}>
+                                      {m.score.toFixed(0)}%
+                                    </span>
+                                    <span className={`text-[10px] font-medium ${scoreColor.split(' ')[0]}`}>
+                                      {scoreLabel}
+                                    </span>
+                                  </div>
+                                  <span className="text-xs font-semibold text-slate-800 leading-tight">{m.product.name}</span>
+                                  <span className="text-[10px] text-slate-500 leading-tight">{m.product.color} / {m.product.size}</span>
+                                </button>
+                              )
+                            })}
+                          </div>
+                        </td>
+                      </tr>
+                    )}
+                    {hasCandidates && row._candidates!.length === 0 && row.productName && (
+                      <tr className="bg-amber-50/60 border-t border-amber-100">
+                        <td></td>
+                        <td colSpan={6} className="px-3 py-2.5">
+                          <p className="text-[10px] text-amber-700 font-semibold mb-2">
+                            자동 매칭 실패 — 제품을 직접 검색하여 선택하세요:
+                          </p>
+                          <ProductSearch
+                            products={products}
+                            onSelect={p => selectCandidate(i, { product: p, score: 100, matchType: 'manual' })}
+                          />
+                        </td>
+                      </tr>
+                    )}
+                  </Fragment>
+                )
+              })}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {result && (
+        <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm font-medium
+          ${result.fail === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
+          <CheckCircle size={16} />
+          {result.ok}개 입고 등록 완료{result.fail > 0 && ` · ${result.fail}개 실패`}
+        </div>
+      )}
+
+      <button onClick={handleSubmit} disabled={validCount === 0 || submitting}
+        className="w-full py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700
+                   disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
+        {submitting ? '등록 중...' : `${validCount}건 입고 등록`}
+      </button>
+    </div>
+  )
+}
+
+// ─── 메인 컴포넌트 ────────────────────────────────────────
+export default function InventoryManage() {
+  const [inputMode, setInputMode] = useState<'single' | 'bulk'>('single')
+  const [products, setProducts]   = useState<Product[]>([])
+  const [history, setHistory]     = useState<InventoryItem[]>([])
+
+  const loadHistory = () => {
+    getInventory().then(items =>
+      setHistory([...items].reverse().slice(0, 20))
+    )
+  }
+
+  useEffect(() => {
+    getProducts().then(setProducts)
+    loadHistory()
+  }, [])
+
+  return (
+    <div className="p-6 max-w-4xl space-y-6">
+      <div>
+        <h1 className="text-2xl font-bold text-slate-800">입고 관리</h1>
+        <p className="text-sm text-slate-400 mt-1">정상 입고와 반품 입고를 구분하여 등록하세요</p>
+      </div>
+
+      {/* 입력 모드 탭 */}
+      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+        <button onClick={() => setInputMode('single')}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors
+            ${inputMode === 'single' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+          낱개 입력
+        </button>
+        <button onClick={() => setInputMode('bulk')}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors
+            ${inputMode === 'bulk' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+          대량 입력
+        </button>
+      </div>
+
+      {inputMode === 'single'
+        ? <SingleForm products={products} onAdded={loadHistory} />
+        : <BulkForm products={products} onAdded={loadHistory} />
+      }
+
+      {/* 입고 내역 */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm">
+        <div className="px-5 py-4 border-b border-slate-100">
+          <h2 className="font-semibold text-slate-700 text-sm">최근 입고 내역 (최근 20건)</h2>
+        </div>
+        <div className="divide-y divide-slate-100">
+          {history.length === 0 ? (
+            <p className="text-sm text-slate-400 text-center py-8">입고 내역 없음</p>
+          ) : history.map(item => (
+            <div key={item.id} className="flex items-center justify-between px-5 py-3">
+              <div className="flex items-center gap-3">
+                <span className={`text-xs px-2 py-0.5 rounded font-medium
+                  ${item.type === 'normal' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                  {item.type === 'normal' ? '정상' : '반품'}
+                </span>
+                <div>
+                  <p className="text-sm text-slate-700">
+                    {item.product ? `${item.product.name} / ${item.product.color} / ${item.product.size}` : `제품 #${item.product_id}`}
+                  </p>
+                  <p className="text-xs text-slate-400">{item.date}</p>
+                </div>
+              </div>
+              <span className="text-sm font-bold text-slate-700">+{item.quantity}</span>
+            </div>
+          ))}
+        </div>
+      </div>
+    </div>
+  )
+}

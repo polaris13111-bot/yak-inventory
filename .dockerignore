@@ -1,0 +1,11 @@
+**/node_modules
+frontend/dist
+frontend/build
+**/__pycache__
+**/*.pyc
+backend/yak.db
+backend/*.db
+backend/server.log
+.git
+.github
+*.md
