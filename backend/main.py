@@ -224,6 +224,18 @@ def delete_order(order_id: int, db: Session = Depends(get_db)):
     db.commit()
     return {'ok': True}
 
+@app.post('/orders/batch-delete')
+def batch_delete_orders(body: dict, db: Session = Depends(get_db)):
+    ids: list[int] = body.get('ids', [])
+    deleted = 0
+    for oid in ids:
+        order = db.get(Order, oid)
+        if order:
+            db.delete(order)
+            deleted += 1
+    db.commit()
+    return {'deleted': deleted}
+
 
 # ─── 입고 ────────────────────────────────────────────────
 

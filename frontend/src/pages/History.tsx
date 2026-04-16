@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ChevronRight, Pencil, Trash2, Check, X, Filter, Package, ShoppingCart, Lock, Download } from 'lucide-react'
 import dayjs from 'dayjs'
-import { getOrders, updateOrder, deleteOrder, getInventory } from '../api'
+import { getOrders, updateOrder, deleteOrder, batchDeleteOrders, getInventory } from '../api'
 import type { Order, InventoryItem } from '../types'
 import { useAdmin } from '../context/AdminContext'
 import { exportOrders, exportInventory } from '../utils/exportXlsx'
@@ -9,41 +9,28 @@ import { exportOrders, exportInventory } from '../utils/exportXlsx'
 type ViewTab   = 'orders' | 'inventory'
 type GroupBy   = 'all' | 'month' | 'week' | 'day'
 
-// M.DD → dayjs 변환 (연도는 현재 연도 기준)
 function parseMDD(dateStr: string, year = dayjs().year()): dayjs.Dayjs {
   const [m, dd] = dateStr.split('.')
   if (!m || !dd) return dayjs()
   return dayjs(`${year}-${m.padStart(2, '0')}-${dd.padStart(2, '0')}`)
 }
 
-// 주 번호 계산 (연-월-주차)
 function weekLabel(dateStr: string): string {
   const d = parseMDD(dateStr)
   const weekOfMonth = Math.ceil(d.date() / 7)
   return `${d.month() + 1}월 ${weekOfMonth}주차`
 }
 
-// ─── 관리자 전용 버튼 셀 ─────────────────────────────────
-function AdminButtons({ onEdit, onDelete }: { onEdit: () => void; onDelete: () => void }) {
-  const { isAdmin } = useAdmin()
-  if (!isAdmin) return <td className="px-4 py-2.5 w-16" />
-  return (
-    <td className="px-4 py-2.5 w-16">
-      <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
-        <button onClick={onEdit} className="text-slate-400 hover:text-blue-500"><Pencil size={13} /></button>
-        <button onClick={onDelete} className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
-      </div>
-    </td>
-  )
-}
-
 // ─── 발주 인라인 편집 행 ──────────────────────────────────
 function OrderRow({
-  order, onDelete, onUpdated,
+  order, selected, onToggle, onDelete, onUpdated, isAdmin,
 }: {
   order: Order
+  selected: boolean
+  onToggle: () => void
   onDelete: () => void
   onUpdated: (updated: Order) => void
+  isAdmin: boolean
 }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving]   = useState(false)
@@ -86,6 +73,10 @@ function OrderRow({
   if (editing) {
     return (
       <tr className="bg-blue-50/50">
+        <td className="px-3 py-2">
+          <input type="checkbox" checked={selected} onChange={onToggle}
+            className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-400" />
+        </td>
         <td className="px-4 py-2">
           <input value={form.date ?? ''} onChange={e => setForm(p => ({...p, date: e.target.value}))}
             className="w-16 border border-blue-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
@@ -128,11 +119,13 @@ function OrderRow({
   }
 
   return (
-    <tr className="hover:bg-slate-50/50 transition-colors group">
-      <td className="px-4 py-2.5 text-sm text-slate-700 font-mono">{order.date}</td>
-      <td className="px-4 py-2.5 text-sm font-medium text-slate-700">
-        {order.product?.name}
+    <tr className={`hover:bg-slate-50/50 transition-colors group ${selected ? 'bg-blue-50/40' : ''}`}>
+      <td className="px-3 py-2.5">
+        <input type="checkbox" checked={selected} onChange={onToggle}
+          className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-400 cursor-pointer" />
       </td>
+      <td className="px-4 py-2.5 text-sm text-slate-700 font-mono">{order.date}</td>
+      <td className="px-4 py-2.5 text-sm font-medium text-slate-700">{order.product?.name}</td>
       <td className="px-4 py-2.5 text-xs text-slate-500">
         {order.product?.color} / {order.product?.size}
       </td>
@@ -140,7 +133,14 @@ function OrderRow({
       <td className="px-4 py-2.5 text-sm text-slate-600">{order.recipient}</td>
       <td className="px-4 py-2.5 text-xs text-slate-500">{order.mall}</td>
       <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[120px] truncate">{order.memo}</td>
-      <AdminButtons onEdit={startEdit} onDelete={onDelete} />
+      {isAdmin && (
+        <td className="px-4 py-2.5 w-16">
+          <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={startEdit} className="text-slate-400 hover:text-blue-500"><Pencil size={13} /></button>
+            <button onClick={onDelete} className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
+          </div>
+        </td>
+      )}
     </tr>
   )
 }
@@ -155,16 +155,17 @@ export default function History() {
   const [loading, setLoading] = useState(true)
   const [search, setSearch]   = useState('')
   const [openGroups, setOpenGroups] = useState<Set<string>>(new Set())
+  const [selected, setSelected] = useState<Set<number>>(new Set())
+  const [bulkDeleting, setBulkDeleting] = useState(false)
 
   const loadAll = () => {
     setLoading(true)
-    Promise.all([
-      getOrders(),
-      getInventory(),
-    ]).then(([o, inv]) => {
-      setOrders([...o].reverse())   // 최신 순
-      setInv([...inv].reverse())
-    }).finally(() => setLoading(false))
+    Promise.all([getOrders(), getInventory()])
+      .then(([o, inv]) => {
+        setOrders([...o].reverse())
+        setInv([...inv].reverse())
+      })
+      .finally(() => setLoading(false))
   }
   useEffect(() => { loadAll() }, [])
 
@@ -172,7 +173,28 @@ export default function History() {
     if (!confirm('이 발주 내역을 삭제할까요?')) return
     await deleteOrder(id)
     setOrders(prev => prev.filter(o => o.id !== id))
+    setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
   }
+
+  const handleBulkDelete = async () => {
+    if (selected.size === 0) return
+    if (!confirm(`선택한 ${selected.size}건을 삭제할까요?`)) return
+    setBulkDeleting(true)
+    try {
+      await batchDeleteOrders(Array.from(selected))
+      setOrders(prev => prev.filter(o => !selected.has(o.id)))
+      setSelected(new Set())
+    } finally {
+      setBulkDeleting(false)
+    }
+  }
+
+  const toggleSelect = (id: number) =>
+    setSelected(prev => {
+      const n = new Set(prev)
+      if (n.has(id)) n.delete(id); else n.add(id)
+      return n
+    })
 
   // 검색 필터
   const filteredOrders = useMemo(() => {
@@ -194,7 +216,6 @@ export default function History() {
     })
   }, [inventory, search])
 
-  // 그룹핑
   const getGroupKey = (dateStr: string): string => {
     if (groupBy === 'all')   return '전체'
     if (groupBy === 'month') return `${dateStr.split('.')[0]}월`
@@ -230,7 +251,21 @@ export default function History() {
       return next
     })
 
-  // groupBy 또는 tab 변경 시 첫 그룹 열기
+  // 그룹 내 전체선택
+  const toggleGroupSelect = (rows: Order[]) => {
+    const ids = rows.map(r => r.id)
+    const allSelected = ids.every(id => selected.has(id))
+    setSelected(prev => {
+      const n = new Set(prev)
+      if (allSelected) ids.forEach(id => n.delete(id))
+      else ids.forEach(id => n.add(id))
+      return n
+    })
+  }
+
+  // 탭 전환 시 선택 초기화
+  useEffect(() => { setSelected(new Set()) }, [tab])
+
   useEffect(() => {
     const keys = tab === 'orders'
       ? Object.keys(groupedOrders)
@@ -244,13 +279,11 @@ export default function History() {
 
   return (
     <div className="p-6 max-w-6xl space-y-5">
-      {/* 헤더 */}
       <div>
         <h1 className="text-2xl font-bold text-slate-800">내역 관리</h1>
         <p className="text-sm text-slate-400 mt-1">발주 · 입고 전체 누적 내역 조회 및 수정</p>
       </div>
 
-      {/* 탭 */}
       <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
         <button onClick={() => setTab('orders')}
           className={`flex items-center gap-2 px-5 py-2 rounded-lg text-sm font-medium transition-colors
@@ -264,11 +297,28 @@ export default function History() {
         </button>
       </div>
 
-      {/* 상단 통계 + 필터 컨트롤 */}
-      {/* 읽기 전용 안내 배너 */}
       {!isAdmin && (
         <div className="flex items-center gap-2 px-3 py-2 bg-slate-100 border border-slate-200 rounded-lg text-xs text-slate-500">
           <Lock size={12} />읽기 전용 모드 · 수정/삭제는 관리자 모드에서 가능합니다
+        </div>
+      )}
+
+      {/* 일괄 삭제 바 */}
+      {isAdmin && selected.size > 0 && (
+        <div className="flex items-center gap-3 px-4 py-2.5 bg-red-50 border border-red-200 rounded-xl">
+          <span className="text-sm font-medium text-red-700">{selected.size}건 선택됨</span>
+          <button
+            onClick={handleBulkDelete}
+            disabled={bulkDeleting}
+            className="flex items-center gap-1.5 px-3 py-1.5 bg-red-600 text-white rounded-lg text-xs font-medium
+                       hover:bg-red-700 disabled:opacity-50 transition-colors">
+            <Trash2 size={12} />{bulkDeleting ? '삭제 중...' : '선택 삭제'}
+          </button>
+          <button
+            onClick={() => setSelected(new Set())}
+            className="text-xs text-red-500 hover:text-red-700">
+            취소
+          </button>
         </div>
       )}
 
@@ -294,7 +344,6 @@ export default function History() {
         </div>
 
         <div className="flex items-center gap-3">
-          {/* 그룹핑 */}
           <div className="flex gap-1 p-1 bg-slate-100 rounded-lg">
             {([['all','전체'], ['month','월별'], ['week','주별'], ['day','일별']] as [GroupBy, string][]).map(([v, label]) => (
               <button key={v} onClick={() => setGroupBy(v)}
@@ -304,14 +353,12 @@ export default function History() {
               </button>
             ))}
           </div>
-          {/* 검색 */}
           <div className="relative">
             <Filter size={13} className="absolute left-3 top-2.5 text-slate-400" />
             <input value={search} onChange={e => setSearch(e.target.value)}
               placeholder="검색..."
               className="pl-8 pr-3 py-2 text-xs border border-slate-200 rounded-lg w-44 focus:outline-none focus:ring-1 focus:ring-blue-400" />
           </div>
-          {/* 다운로드 */}
           <button
             onClick={() => tab === 'orders'
               ? exportOrders(filteredOrders, search ? `발주_검색결과` : '발주내역')
@@ -322,7 +369,6 @@ export default function History() {
         </div>
       </div>
 
-      {/* 내역 테이블 */}
       {loading ? (
         <div className="text-center py-16 text-slate-400 text-sm">로딩 중...</div>
       ) : tab === 'orders' ? (
@@ -330,6 +376,9 @@ export default function History() {
           {Object.entries(groupedOrders).map(([groupKey, rows]) => {
             const isOpen = openGroups.has(groupKey)
             const groupQty = rows.reduce((s, r) => s + r.quantity, 0)
+            const groupIds = rows.map(r => r.id)
+            const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selected.has(id))
+            const someGroupSelected = groupIds.some(id => selected.has(id))
             return (
               <div key={groupKey} className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                 <button
@@ -340,6 +389,11 @@ export default function History() {
                     <span className="font-semibold text-slate-700">{groupKey}</span>
                     <span className="text-xs text-slate-400">{rows.length}건</span>
                     <span className="text-xs px-2 py-0.5 bg-blue-100 text-blue-700 rounded-full">{groupQty}개 출고</span>
+                    {someGroupSelected && (
+                      <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">
+                        {groupIds.filter(id => selected.has(id)).length}건 선택
+                      </span>
+                    )}
                   </div>
                 </button>
                 {isOpen && (
@@ -347,6 +401,17 @@ export default function History() {
                     <table className="w-full text-sm" style={{ minWidth: '700px' }}>
                       <thead>
                         <tr className="bg-slate-50/80 text-xs">
+                          {isAdmin && (
+                            <th className="px-3 py-2 w-8">
+                              <input
+                                type="checkbox"
+                                checked={allGroupSelected}
+                                ref={el => { if (el) el.indeterminate = someGroupSelected && !allGroupSelected }}
+                                onChange={() => toggleGroupSelect(rows)}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-400 cursor-pointer"
+                              />
+                            </th>
+                          )}
                           <th className="px-4 py-2 text-left font-medium text-slate-500 w-16">발주일</th>
                           <th className="px-4 py-2 text-left font-medium text-slate-500">제품명</th>
                           <th className="px-4 py-2 text-left font-medium text-slate-500">색상/사이즈</th>
@@ -354,7 +419,7 @@ export default function History() {
                           <th className="px-4 py-2 text-left font-medium text-slate-500">수령인</th>
                           <th className="px-4 py-2 text-left font-medium text-slate-500">MALL</th>
                           <th className="px-4 py-2 text-left font-medium text-slate-500">메모</th>
-                          <th className="px-4 py-2 w-16"></th>
+                          {isAdmin && <th className="px-4 py-2 w-16"></th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
@@ -362,8 +427,11 @@ export default function History() {
                           <OrderRow
                             key={order.id}
                             order={order}
+                            selected={selected.has(order.id)}
+                            onToggle={() => toggleSelect(order.id)}
                             onDelete={() => handleDeleteOrder(order.id)}
                             onUpdated={updated => setOrders(prev => prev.map(o => o.id === updated.id ? updated : o))}
+                            isAdmin={isAdmin}
                           />
                         ))}
                       </tbody>

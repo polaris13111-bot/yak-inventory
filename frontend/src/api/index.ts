@@ -31,6 +31,9 @@ export const updateOrder = (id: number, data: Omit<Order, 'id' | 'created_at' | 
 export const deleteOrder = (id: number) =>
   api.delete(`/orders/${id}`)
 
+export const batchDeleteOrders = (ids: number[]) =>
+  api.post('/orders/batch-delete', { ids }).then(r => r.data)
+
 // 입고
 export const getInventory = (params?: { month?: string }) =>
   api.get<InventoryItem[]>('/inventory', { params }).then(r => r.data)
