@@ -49,4 +49,6 @@ jobs:
             --min-instances 0 \
             --max-instances 1 \
             --set-env-vars DATABASE_URL=sqlite:////data/yak.db \
+            --add-volume=name=db-vol,type=cloud-storage,bucket=yak-inventory-data \
+            --add-volume-mount=volume=db-vol,mount-path=/data \
             --quiet
