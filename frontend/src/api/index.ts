@@ -2,7 +2,7 @@ import axios from 'axios'
 import type { Product, Order, InventoryItem, StockSummary, DailyOutbound, MappingRule } from '../types'
 
 const api = axios.create({
-  baseURL: import.meta.env.VITE_API_URL ?? 'http://localhost:8000',
+  baseURL: import.meta.env.VITE_API_URL ?? '',
 })
 
 // 제품
