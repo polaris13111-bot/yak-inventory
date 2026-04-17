@@ -16,6 +16,25 @@ from models import ENGINE, init_db, Product, Order, InventoryItem, InventoryType
 init_db()
 SessionLocal = sessionmaker(bind=ENGINE)
 
+# ── 시드 데이터 (DB가 비어있을 때 상품 자동 등록) ─────────
+def _seed_products():
+    _seed_file = Path(__file__).parent / 'seed_products.json'
+    if not _seed_file.exists():
+        return
+    with SessionLocal() as db:
+        if db.query(Product).count() > 0:
+            return
+        data = json.loads(_seed_file.read_text(encoding='utf-8'))
+        for p in data:
+            db.add(Product(
+                name=p['name'], color=p['color'],
+                size=p['size'], model_code=p.get('model_code')
+            ))
+        db.commit()
+        print(f'[seed] 상품 {len(data)}개 등록 완료')
+
+_seed_products()
+
 app = FastAPI(title='야크 재고관리 API')
 
 app.add_middleware(
