@@ -185,7 +185,7 @@ function BulkForm({ products }: { products: Product[] }) {
   const [pasteText, setPasteText] = useState('')
   const [rows, setRows]         = useState<BulkRow[]>([EMPTY_ROW()])
   const [submitting, setSubmitting] = useState(false)
-  const [result, setResult]     = useState<{ ok: number; fail: number; failRows?: number[] } | null>(null)
+  const [result, setResult]     = useState<{ ok: number; fail: number; failRows?: number[]; failItems?: BulkRow[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // 제품 매칭: autoMatch → 실패 시 findCandidates
@@ -361,27 +361,46 @@ function BulkForm({ products }: { products: Product[] }) {
 
   const addRow = () => setRows(prev => [...prev, EMPTY_ROW()])
 
-  const handleSubmit = async () => {
-    const valid = rows.filter(r => r._resolved)
-    if (valid.length === 0) return
-    setSubmitting(true)
-    const validWithIdx = valid.map((r, i) => ({ r, origIdx: rows.indexOf(r, i) }))
+  const submitItems = async (items: BulkRow[]) => {
+    const withIdx = items.map((r, i) => ({ r, origIdx: rows.indexOf(r, i) }))
     const results = await Promise.allSettled(
-      validWithIdx.map(({ r }) => createOrder({
+      withIdx.map(({ r }) => createOrder({
         date: r.date, product_id: r._resolved!.id, quantity: Number(r.quantity),
         order_date: r.order_date, storage: r.storage, mall: r.mall,
         orderer: r.orderer, recipient: r.recipient, phone: r.phone,
         address: r.address, memo: r.memo,
       }))
     )
-    const ok       = results.filter(r => r.status === 'fulfilled').length
-    const failRows = results
-      .map((r, i) => r.status === 'rejected' ? validWithIdx[i].origIdx + 1 : null)
-      .filter((v): v is number => v !== null)
-    const fail = failRows.length
+    const ok        = results.filter(r => r.status === 'fulfilled').length
+    const failItems = results
+      .map((r, i) => r.status === 'rejected' ? withIdx[i].r : null)
+      .filter((v): v is BulkRow => v !== null)
+    const failRows  = failItems.map(r => (rows.indexOf(r) + 1))
+    return { ok, failItems, failRows }
+  }
+
+  const handleSubmit = async () => {
+    const valid = rows.filter(r => r._resolved)
+    if (valid.length === 0) return
+    setSubmitting(true)
+    const { ok, failItems, failRows } = await submitItems(valid)
     setSubmitting(false)
-    setResult({ ok, fail, failRows })
-    if (fail === 0) setTimeout(() => { setRows([EMPTY_ROW()]); setResult(null) }, 2500)
+    setResult({ ok, fail: failItems.length, failRows, failItems })
+    if (failItems.length === 0) setTimeout(() => { setRows([EMPTY_ROW()]); setResult(null) }, 2500)
+  }
+
+  const handleRetry = async () => {
+    if (!result?.failItems?.length) return
+    setSubmitting(true)
+    const { ok, failItems, failRows } = await submitItems(result.failItems)
+    setSubmitting(false)
+    setResult(prev => ({
+      ok: (prev?.ok ?? 0) + ok,
+      fail: failItems.length,
+      failRows,
+      failItems,
+    }))
+    if (failItems.length === 0) setTimeout(() => { setRows([EMPTY_ROW()]); setResult(null) }, 2500)
   }
 
   const validCount      = rows.filter(r => r._resolved).length
@@ -636,11 +655,19 @@ function BulkForm({ products }: { products: Product[] }) {
 
       {/* 결과 메시지 */}
       {result && (
-        <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm font-medium
+        <div className={`flex items-center justify-between gap-3 p-3 rounded-lg border text-sm font-medium
           ${result.fail === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
-          <CheckCircle size={16} />
-          {result.ok}개 등록 완료
-          {result.fail > 0 && ` · ${result.fail}개 실패 (${result.failRows?.map(n => `${n}행`).join(', ')})`}
+          <div className="flex items-center gap-2">
+            <CheckCircle size={16} />
+            {result.ok}개 등록 완료
+            {result.fail > 0 && ` · ${result.fail}개 실패 (${result.failRows?.map(n => `${n}행`).join(', ')})`}
+          </div>
+          {result.fail > 0 && (
+            <button onClick={handleRetry} disabled={submitting}
+              className="px-3 py-1 bg-amber-500 text-white text-xs font-semibold rounded-lg hover:bg-amber-600 transition-colors disabled:opacity-50">
+              다시하기
+            </button>
+          )}
         </div>
       )}
 

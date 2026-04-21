@@ -21,6 +21,7 @@ const ADMIN_NAV = [
   { to: '/history',  icon: History,         label: '내역 관리' },
   { to: '/order',    icon: ClipboardList,   label: '발주 입력' },
   { to: '/inventory',icon: PackagePlus,     label: '입고 관리' },
+  { to: '/settings', icon: Settings,        label: '상품목록' },
 ]
 
 // ─── 비밀번호 모달 (사이드바 관리자 전환용) ──────────────
@@ -139,15 +140,7 @@ function Layout() {
         </nav>
 
         <div className="px-3 py-3 border-t border-slate-100">
-          {isAdmin && (
-            <NavLink to="/settings"
-              className={({ isActive }) =>
-                `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                 ${isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-500 hover:bg-slate-50 hover:text-slate-700'}`}>
-              <Settings size={18} />설정
-            </NavLink>
-          )}
-          <p className="text-xs text-slate-400 px-3 pt-2">뉴페이스 © 2026</p>
+          <p className="text-xs text-slate-400 px-3 pt-1">뉴페이스 © 2026</p>
         </div>
       </aside>
 
