@@ -1,4 +1,4 @@
-from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime, ForeignKey, create_engine
+from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime, ForeignKey, create_engine, event
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 import enum
@@ -10,6 +10,13 @@ Base = declarative_base()
 # 로컬: 현재 디렉토리의 yak.db
 _db_url = os.getenv('DATABASE_URL', 'sqlite:///./yak.db')
 ENGINE = create_engine(_db_url, echo=False, connect_args={'check_same_thread': False})
+
+@event.listens_for(ENGINE, 'connect')
+def _set_sqlite_pragmas(conn, _):
+    cur = conn.cursor()
+    cur.execute('PRAGMA journal_mode=WAL')   # 동시 쓰기 허용
+    cur.execute('PRAGMA busy_timeout=5000')  # 잠금 시 5초 대기 후 재시도
+    cur.close()
 
 
 class InventoryType(str, enum.Enum):

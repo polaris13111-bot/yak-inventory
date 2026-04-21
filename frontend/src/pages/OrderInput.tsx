@@ -185,7 +185,7 @@ function BulkForm({ products }: { products: Product[] }) {
   const [pasteText, setPasteText] = useState('')
   const [rows, setRows]         = useState<BulkRow[]>([EMPTY_ROW()])
   const [submitting, setSubmitting] = useState(false)
-  const [result, setResult]     = useState<{ ok: number; fail: number } | null>(null)
+  const [result, setResult]     = useState<{ ok: number; fail: number; failRows?: number[] } | null>(null)
   const fileRef = useRef<HTMLInputElement>(null)
 
   // 제품 매칭: autoMatch → 실패 시 findCandidates
@@ -365,18 +365,22 @@ function BulkForm({ products }: { products: Product[] }) {
     const valid = rows.filter(r => r._resolved)
     if (valid.length === 0) return
     setSubmitting(true)
+    const validWithIdx = valid.map((r, i) => ({ r, origIdx: rows.indexOf(r, i) }))
     const results = await Promise.allSettled(
-      valid.map(r => createOrder({
+      validWithIdx.map(({ r }) => createOrder({
         date: r.date, product_id: r._resolved!.id, quantity: Number(r.quantity),
         order_date: r.order_date, storage: r.storage, mall: r.mall,
         orderer: r.orderer, recipient: r.recipient, phone: r.phone,
         address: r.address, memo: r.memo,
       }))
     )
-    const ok   = results.filter(r => r.status === 'fulfilled').length
-    const fail = results.filter(r => r.status === 'rejected').length
+    const ok       = results.filter(r => r.status === 'fulfilled').length
+    const failRows = results
+      .map((r, i) => r.status === 'rejected' ? validWithIdx[i].origIdx + 1 : null)
+      .filter((v): v is number => v !== null)
+    const fail = failRows.length
     setSubmitting(false)
-    setResult({ ok, fail })
+    setResult({ ok, fail, failRows })
     if (fail === 0) setTimeout(() => { setRows([EMPTY_ROW()]); setResult(null) }, 2500)
   }
 
@@ -635,7 +639,8 @@ function BulkForm({ products }: { products: Product[] }) {
         <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm font-medium
           ${result.fail === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
           <CheckCircle size={16} />
-          {result.ok}개 등록 완료{result.fail > 0 && ` · ${result.fail}개 실패`}
+          {result.ok}개 등록 완료
+          {result.fail > 0 && ` · ${result.fail}개 실패 (${result.failRows?.map(n => `${n}행`).join(', ')})`}
         </div>
       )}
 
