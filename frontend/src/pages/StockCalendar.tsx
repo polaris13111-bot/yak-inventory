@@ -1,6 +1,7 @@
 import { useState, useMemo, useEffect } from 'react'
-import { ChevronLeft, ChevronRight, Search, X, Package } from 'lucide-react'
+import { ChevronLeft, ChevronRight, Search, X, Package, Download } from 'lucide-react'
 import dayjs from 'dayjs'
+import * as XLSX from 'xlsx'
 import { getProducts, getDailyOutbound, getOrders } from '../api'
 import type { Product, DailyOutbound, Order } from '../types'
 import { getColorHex } from '../utils/colors'
@@ -91,6 +92,34 @@ export default function StockCalendar() {
     )
   , [dates, filteredProducts, outboundMap])
 
+  const downloadExcel = () => {
+    const headers = ['제품명', '색상', '사이즈', ...dates.map(d => `${d.day}일`), '합계']
+    const dataRows = filteredProducts.map(p => {
+      const rowTotal = dates.reduce((s, { dateStr }) => s + (outboundMap[dateStr]?.[p.id] ?? 0), 0)
+      return [
+        p.name, p.color, p.size,
+        ...dates.map(({ dateStr }) => outboundMap[dateStr]?.[p.id] ?? 0),
+        rowTotal,
+      ]
+    })
+    const totalRow = [
+      '일별 합계', '', '',
+      ...dateTotals,
+      monthTotal,
+    ]
+
+    const ws = XLSX.utils.aoa_to_sheet([headers, ...dataRows, totalRow])
+    // 열 너비 설정
+    ws['!cols'] = [
+      { wch: 24 }, { wch: 10 }, { wch: 8 },
+      ...dates.map(() => ({ wch: 5 })),
+      { wch: 6 },
+    ]
+    const wb = XLSX.utils.book_new()
+    XLSX.utils.book_append_sheet(wb, ws, `${year}년 ${month}월`)
+    XLSX.writeFile(wb, `출고현황_${year}년${String(month).padStart(2,'0')}월.xlsx`)
+  }
+
   const addKw = (type: 'inc' | 'exc') => {
     const val = (type === 'inc' ? inputInc : inputExc).trim()
     if (!val) return
@@ -116,7 +145,7 @@ export default function StockCalendar() {
             </button>
           </div>
 
-          {/* 요약 통계 */}
+          {/* 요약 통계 + 다운로드 */}
           <div className="flex items-center gap-4 text-xs text-slate-500">
             <span className="flex items-center gap-1">
               <Package size={13} className="text-slate-400" />
@@ -126,6 +155,10 @@ export default function StockCalendar() {
               이번 달 총 출고
               <span className="font-bold text-blue-600 text-sm">{monthTotal}</span>건
             </span>
+            <button onClick={downloadExcel}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-green-600 text-white rounded-lg hover:bg-green-700 transition-colors text-xs font-medium">
+              <Download size={13} />엑셀 다운로드
+            </button>
           </div>
         </div>
 
