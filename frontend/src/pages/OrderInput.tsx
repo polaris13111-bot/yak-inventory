@@ -6,7 +6,7 @@ import { getProducts, createOrder } from '../api'
 import type { Product } from '../types'
 import { autoMatch, findCandidates, scoreLabel, matchTypeBadge } from '../utils/matcher'
 import type { MatchResult } from '../utils/matcher'
-import ProductSearch from '../components/ProductSearch'
+import ProductCascade from '../components/ProductCascade'
 import { getColorHex } from '../utils/colors'
 
 const colorDot = (color: string) => (
@@ -602,7 +602,7 @@ function BulkForm({ products }: { products: Product[] }) {
                             </button>
                             {row._showSearch && (
                               <div className="mt-2">
-                                <ProductSearch
+                                <ProductCascade
                                   products={products}
                                   onSelect={p => selectCandidate(i, { product: p, score: 100, matchType: 'manual' })}
                                 />
