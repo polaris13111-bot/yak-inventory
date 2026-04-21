@@ -33,11 +33,12 @@ interface BulkRow {
   _matchType?: string        // 매칭 방식
   _candidates?: MatchResult[] // 수동 매칭 후보 (autoMatch 실패 시)
   _error?: string            // 날짜/수량 오류 (제품 매칭 외)
+  _showSearch?: boolean      // 직접검색 패널 토글
 }
 
 const BULK_COLS: { key: keyof BulkRow; label: string; width: string; placeholder: string }[] = [
   { key: 'date',        label: '발주일',   width: 'w-20',  placeholder: '4.16' },
-  { key: 'productName', label: '제품명',   width: 'w-36',  placeholder: 'H티아고 자켓' },
+  { key: 'productName', label: '제품명',   width: 'w-56',  placeholder: 'H티아고 자켓' },
   { key: 'color',       label: '색상',     width: 'w-24',  placeholder: '블랙' },
   { key: 'size',        label: '사이즈',   width: 'w-16',  placeholder: '95' },
   { key: 'quantity',    label: '수량',     width: 'w-14',  placeholder: '1' },
@@ -336,6 +337,25 @@ function BulkForm({ products }: { products: Product[] }) {
     })
   }
 
+  const clearMatch = (i: number) => {
+    setRows(prev => {
+      const next = [...prev]
+      const r = next[i]
+      const text = [r.productName, r.color, r.size].filter(Boolean).join(' ')
+      const candidates = text.trim() ? findCandidates(text, products, 5, 25) : []
+      next[i] = { ...next[i], _resolved: undefined, _matchType: undefined, _candidates: candidates, _showSearch: false }
+      return next
+    })
+  }
+
+  const toggleSearch = (i: number) => {
+    setRows(prev => {
+      const next = [...prev]
+      next[i] = { ...next[i], _showSearch: !next[i]._showSearch }
+      return next
+    })
+  }
+
   const removeRow = (i: number) =>
     setRows(prev => prev.length === 1 ? [EMPTY_ROW()] : prev.filter((_, idx) => idx !== i))
 
@@ -345,18 +365,16 @@ function BulkForm({ products }: { products: Product[] }) {
     const valid = rows.filter(r => r._resolved)
     if (valid.length === 0) return
     setSubmitting(true)
-    let ok = 0; let fail = 0
-    for (const r of valid) {
-      try {
-        await createOrder({
-          date: r.date, product_id: r._resolved!.id, quantity: Number(r.quantity),
-          order_date: r.order_date, storage: r.storage, mall: r.mall,
-          orderer: r.orderer, recipient: r.recipient, phone: r.phone,
-          address: r.address, memo: r.memo,
-        })
-        ok++
-      } catch { fail++ }
-    }
+    const results = await Promise.allSettled(
+      valid.map(r => createOrder({
+        date: r.date, product_id: r._resolved!.id, quantity: Number(r.quantity),
+        order_date: r.order_date, storage: r.storage, mall: r.mall,
+        orderer: r.orderer, recipient: r.recipient, phone: r.phone,
+        address: r.address, memo: r.memo,
+      }))
+    )
+    const ok   = results.filter(r => r.status === 'fulfilled').length
+    const fail = results.filter(r => r.status === 'rejected').length
     setSubmitting(false)
     setResult({ ok, fail })
     if (fail === 0) setTimeout(() => { setRows([EMPTY_ROW()]); setResult(null) }, 2500)
@@ -449,7 +467,7 @@ function BulkForm({ products }: { products: Product[] }) {
         </div>
 
         <div className="overflow-auto">
-          <table className="w-full text-xs border-collapse" style={{ minWidth: '1100px' }}>
+          <table className="w-full text-xs border-collapse" style={{ minWidth: '1300px' }}>
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="px-2 py-2 text-left font-medium text-slate-500 w-8">#</th>
@@ -497,7 +515,7 @@ function BulkForm({ products }: { products: Product[] }) {
                                 <input value={row[c.key] as string} onChange={e => updateRow(i, c.key, e.target.value)}
                                   placeholder={c.placeholder} className={inputCls} />
                                 <div className="flex items-center gap-1 px-0.5 flex-wrap">
-                                  <span className="text-[10px] text-green-700 font-semibold truncate max-w-[120px]">
+                                  <span className="text-[10px] text-green-700 font-semibold truncate max-w-[100px]">
                                     {row._resolved.name}
                                   </span>
                                   <span className="flex items-center gap-0.5 text-[10px] text-slate-500">
@@ -506,6 +524,10 @@ function BulkForm({ products }: { products: Product[] }) {
                                   <span className="text-[10px] px-1 py-0.5 bg-slate-100 text-slate-500 rounded font-mono">
                                     {row._resolved.size}
                                   </span>
+                                  <button onClick={() => clearMatch(i)}
+                                    className="ml-auto text-[10px] text-slate-400 hover:text-red-500 transition-colors px-1 rounded">
+                                    ✕ 수정
+                                  </button>
                                 </div>
                               </div>
                             ) : (
@@ -527,58 +549,66 @@ function BulkForm({ products }: { products: Product[] }) {
                       </td>
                     </tr>
                     {/* 수동 매칭 후보 선택 행 */}
-                    {isAmber && row._candidates!.length > 0 && (
+                    {isAmber && (
                       <tr className="bg-amber-50/60 border-t border-amber-100">
                         <td></td>
-                        <td colSpan={BULK_COLS.length + 1} className="px-3 py-2.5">
-                          <p className="text-[10px] text-amber-700 font-semibold mb-2 flex items-center gap-1">
-                            <HelpCircle size={11} />
-                            자동 매칭 실패 — 아래 후보 중 하나를 선택하세요
-                          </p>
-                          <div className="flex flex-wrap gap-2">
-                            {row._candidates!.map((m, ci) => {
-                              const sl = scoreLabel(m.score)
-                              return (
-                                <button
-                                  key={ci}
-                                  onClick={() => selectCandidate(i, m)}
-                                  className="flex flex-col gap-1 px-3 py-2 bg-white border border-amber-200 rounded-lg hover:border-amber-400 hover:bg-amber-50 hover:shadow-sm transition-all text-left min-w-[130px]"
-                                >
-                                  <div className="flex items-center gap-1.5">
-                                    <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${sl.color}`}>
-                                      {m.score.toFixed(0)}%
-                                    </span>
-                                    <span className={`text-[10px] font-medium ${sl.color.split(' ')[0]}`}>
-                                      {sl.label}
-                                    </span>
-                                  </div>
-                                  <span className="text-xs font-semibold text-slate-800 leading-tight">
-                                    {m.product.name}
-                                  </span>
-                                  <span className="flex items-center gap-1 text-[10px] text-slate-500 leading-tight">
-                                    {colorDot(m.product.color)}
-                                    {m.product.color}
-                                    <span className="px-1 py-0.5 bg-slate-100 rounded font-mono">{m.product.size}</span>
-                                  </span>
-                                </button>
-                              )
-                            })}
+                        <td colSpan={BULK_COLS.length + 1} className="px-3 py-2.5 space-y-2">
+                          {row._candidates!.length > 0 ? (
+                            <>
+                              <p className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
+                                <HelpCircle size={11} />
+                                자동 매칭 실패 — 아래 후보 중 하나를 선택하세요
+                              </p>
+                              <div className="flex flex-wrap gap-2">
+                                {row._candidates!.map((m, ci) => {
+                                  const sl = scoreLabel(m.score)
+                                  return (
+                                    <button
+                                      key={ci}
+                                      onClick={() => selectCandidate(i, m)}
+                                      className="flex flex-col gap-1 px-3 py-2 bg-white border border-amber-200 rounded-lg hover:border-amber-400 hover:bg-amber-50 hover:shadow-sm transition-all text-left min-w-[130px]"
+                                    >
+                                      <div className="flex items-center gap-1.5">
+                                        <span className={`text-[10px] px-1.5 py-0.5 rounded-full font-bold ${sl.color}`}>
+                                          {m.score.toFixed(0)}%
+                                        </span>
+                                        <span className={`text-[10px] font-medium ${sl.color.split(' ')[0]}`}>
+                                          {sl.label}
+                                        </span>
+                                      </div>
+                                      <span className="text-xs font-semibold text-slate-800 leading-tight">
+                                        {m.product.name}
+                                      </span>
+                                      <span className="flex items-center gap-1 text-[10px] text-slate-500 leading-tight">
+                                        {colorDot(m.product.color)}
+                                        {m.product.color}
+                                        <span className="px-1 py-0.5 bg-slate-100 rounded font-mono">{m.product.size}</span>
+                                      </span>
+                                    </button>
+                                  )
+                                })}
+                              </div>
+                            </>
+                          ) : (
+                            <p className="text-[10px] text-amber-700 font-semibold flex items-center gap-1">
+                              <HelpCircle size={11} />
+                              자동 매칭 실패 — 후보 없음
+                            </p>
+                          )}
+                          <div>
+                            <button onClick={() => toggleSearch(i)}
+                              className="text-[10px] text-slate-500 hover:text-blue-600 underline transition-colors">
+                              {row._showSearch ? '직접검색 닫기' : '직접검색으로 찾기'}
+                            </button>
+                            {row._showSearch && (
+                              <div className="mt-2">
+                                <ProductSearch
+                                  products={products}
+                                  onSelect={p => selectCandidate(i, { product: p, score: 100, matchType: 'manual' })}
+                                />
+                              </div>
+                            )}
                           </div>
-                        </td>
-                      </tr>
-                    )}
-                    {/* 후보 없음 → 직접 검색 */}
-                    {isAmber && row._candidates!.length === 0 && row.productName && (
-                      <tr className="bg-amber-50/60 border-t border-amber-100">
-                        <td></td>
-                        <td colSpan={BULK_COLS.length + 1} className="px-3 py-2.5">
-                          <p className="text-[10px] text-amber-700 font-semibold mb-2">
-                            자동 매칭 실패 — 제품을 직접 검색하여 선택하세요:
-                          </p>
-                          <ProductSearch
-                            products={products}
-                            onSelect={p => selectCandidate(i, { product: p, score: 100, matchType: 'manual' })}
-                          />
                         </td>
                       </tr>
                     )}

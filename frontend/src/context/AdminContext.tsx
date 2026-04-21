@@ -2,33 +2,45 @@ import { createContext, useContext, useState, useCallback, type ReactNode } from
 
 interface AdminContextType {
   isAdmin: boolean
-  login: (password: string) => boolean
+  isViewer: boolean
+  loginAdmin: (password: string) => boolean
+  loginViewer: (password: string) => boolean
+  login: (password: string) => boolean  // 기존 호환
   logout: () => void
 }
 
-const ADMIN_PASSWORD = '0000'
+const ADMIN_PASSWORD  = 'newface'
+const VIEWER_PASSWORD = 'blackyak'
 
 const AdminContext = createContext<AdminContextType>({
   isAdmin: false,
+  isViewer: false,
+  loginAdmin: () => false,
+  loginViewer: () => false,
   login: () => false,
   logout: () => {},
 })
 
 export function AdminProvider({ children }: { children: ReactNode }) {
-  const [isAdmin, setIsAdmin] = useState(false)
+  const [isAdmin, setIsAdmin]   = useState(false)
+  const [isViewer, setIsViewer] = useState(false)
 
-  const login = useCallback((pw: string) => {
-    if (pw === ADMIN_PASSWORD) {
-      setIsAdmin(true)
-      return true
-    }
+  const loginAdmin = useCallback((pw: string) => {
+    if (pw === ADMIN_PASSWORD) { setIsAdmin(true); setIsViewer(false); return true }
     return false
   }, [])
 
-  const logout = useCallback(() => setIsAdmin(false), [])
+  const loginViewer = useCallback((pw: string) => {
+    if (pw === VIEWER_PASSWORD) { setIsViewer(true); setIsAdmin(false); return true }
+    return false
+  }, [])
+
+  const login = loginAdmin  // 기존 PasswordModal 호환
+
+  const logout = useCallback(() => { setIsAdmin(false); setIsViewer(false) }, [])
 
   return (
-    <AdminContext.Provider value={{ isAdmin, login, logout }}>
+    <AdminContext.Provider value={{ isAdmin, isViewer, loginAdmin, loginViewer, login, logout }}>
       {children}
     </AdminContext.Provider>
   )
