@@ -466,8 +466,8 @@ function BulkForm({ products }: { products: Product[] }) {
           </button>
         </div>
 
-        <div className="overflow-auto">
-          <table className="w-full text-xs border-collapse" style={{ minWidth: '1300px' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full table-fixed text-xs border-collapse">
             <thead>
               <tr className="bg-slate-50 border-b border-slate-200">
                 <th className="px-2 py-2 text-left font-medium text-slate-500 w-8">#</th>
@@ -659,7 +659,7 @@ export default function OrderInput() {
   useEffect(() => { getProducts().then(setProducts) }, [])
 
   return (
-    <div className="p-6 max-w-5xl">
+    <div className="p-6">
       <h1 className="text-2xl font-bold text-slate-800 mb-1">발주 입력</h1>
       <p className="text-sm text-slate-400 mb-5">낱개 또는 대량으로 발주를 등록하세요</p>
 
