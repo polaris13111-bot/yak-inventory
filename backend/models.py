@@ -14,8 +14,9 @@ ENGINE = create_engine(_db_url, echo=False, connect_args={'check_same_thread': F
 @event.listens_for(ENGINE, 'connect')
 def _set_sqlite_pragmas(conn, _):
     cur = conn.cursor()
-    cur.execute('PRAGMA journal_mode=WAL')   # 동시 쓰기 허용
-    cur.execute('PRAGMA busy_timeout=5000')  # 잠금 시 5초 대기 후 재시도
+    cur.execute('PRAGMA journal_mode=DELETE')  # WAL은 GCS FUSE에서 POSIX 락 미지원으로 stale read 발생
+    cur.execute('PRAGMA synchronous=NORMAL')
+    cur.execute('PRAGMA busy_timeout=5000')
     cur.close()
 
 
