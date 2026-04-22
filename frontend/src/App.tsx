@@ -2,7 +2,7 @@ import { useState, useRef, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, CalendarDays, ClipboardList, PackagePlus,
-  History, Settings, Lock, LockOpen, Eye, X, ShieldCheck
+  History, Settings, Lock, LockOpen, Eye, X, ShieldCheck, BarChart2
 } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import StockCalendar from './pages/StockCalendar'
@@ -10,12 +10,14 @@ import OrderInput from './pages/OrderInput'
 import InventoryManage from './pages/InventoryManage'
 import HistoryPage from './pages/History'
 import SettingsPage from './pages/Settings'
+import Analytics from './pages/Analytics'
 import { AdminProvider, useAdmin } from './context/AdminContext'
 
 // ─── 네비 정의 ────────────────────────────────────────────
 const VIEWER_NAV = [
-  { to: '/',         icon: LayoutDashboard, label: '대시보드' },
-  { to: '/calendar', icon: CalendarDays,    label: '출고 현황' },
+  { to: '/',          icon: LayoutDashboard, label: '대시보드' },
+  { to: '/calendar',  icon: CalendarDays,    label: '출고 현황' },
+  { to: '/analytics', icon: BarChart2,       label: '판매 분석' },
 ]
 const ADMIN_NAV = [
   { to: '/history',  icon: History,         label: '내역 관리' },
@@ -146,8 +148,9 @@ function Layout() {
 
       <main className="flex-1 overflow-auto">
         <Routes>
-          <Route path="/"          element={<Dashboard />} />
-          <Route path="/calendar"  element={<StockCalendar />} />
+          <Route path="/"           element={<Dashboard />} />
+          <Route path="/calendar"   element={<StockCalendar />} />
+          <Route path="/analytics"  element={<Analytics />} />
           <Route path="/history"   element={isAdmin ? <HistoryPage /> : <Unauthorized />} />
           <Route path="/order"     element={isAdmin ? <OrderInput /> : <Unauthorized />} />
           <Route path="/inventory" element={isAdmin ? <InventoryManage /> : <Unauthorized />} />
