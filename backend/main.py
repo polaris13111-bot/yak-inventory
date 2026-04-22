@@ -261,15 +261,13 @@ def delete_order(order_id: int, db: Session = Depends(get_db)):
 
 @app.post('/orders/batch-delete')
 def batch_delete_orders(body: dict, db: Session = Depends(get_db)):
+    from sqlalchemy import delete as sa_delete
     ids: list[int] = body.get('ids', [])
-    deleted = 0
-    for oid in ids:
-        order = db.get(Order, oid)
-        if order:
-            db.delete(order)
-            deleted += 1
+    if not ids:
+        return {'deleted': 0}
+    result = db.execute(sa_delete(Order).where(Order.id.in_(ids)))
     db.commit()
-    return {'deleted': deleted}
+    return {'deleted': result.rowcount}
 
 @app.post('/orders/bulk')
 def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
@@ -349,19 +347,22 @@ def delete_inventory(item_id: int, db: Session = Depends(get_db)):
 @app.get('/stock/summary', response_model=list[StockSummaryOut])
 def get_stock_summary(month: Optional[str] = None, db: Session = Depends(get_db)):
     products = db.query(Product).order_by(Product.name, Product.color, Product.size).all()
+
+    inv_q = db.query(InventoryItem.product_id, func.sum(InventoryItem.quantity).label('total'))
+    if month:
+        inv_q = inv_q.filter(InventoryItem.date.like(f'{month}.%'))
+    inv_map = {r.product_id: r.total for r in inv_q.group_by(InventoryItem.product_id).all()}
+
+    ord_q = db.query(Order.product_id, func.sum(Order.quantity).label('total'))
+    if month:
+        ord_q = ord_q.filter(Order.date.like(f'{month}.%'))
+    ord_map = {r.product_id: r.total for r in ord_q.group_by(Order.product_id).all()}
+
     result = []
     for p in products:
-        inv_q = db.query(func.sum(InventoryItem.quantity)).filter(InventoryItem.product_id == p.id)
-        if month:
-            inv_q = inv_q.filter(InventoryItem.date.like(f'{month}.%'))
-        total_in = inv_q.scalar() or 0
-
-        ord_q = db.query(func.sum(Order.quantity)).filter(Order.product_id == p.id)
-        if month:
-            ord_q = ord_q.filter(Order.date.like(f'{month}.%'))
-        total_out = ord_q.scalar() or 0
-
-        current = total_in - total_out
+        total_in  = inv_map.get(p.id, 0)
+        total_out = ord_map.get(p.id, 0)
+        current   = total_in - total_out
         result.append(StockSummaryOut(
             product=p, total_in=total_in, total_out=total_out,
             current_stock=current, low_stock=current < 1,
