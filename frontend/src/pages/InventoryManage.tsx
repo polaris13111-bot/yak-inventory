@@ -572,6 +572,8 @@ export default function InventoryManage() {
   const [editingId, setEditingId]     = useState<number | null>(null)
   const [editQty, setEditQty]         = useState('')
   const [deleting, setDeleting]       = useState(false)
+  const [deleteError, setDeleteError] = useState(false)
+  const [editError, setEditError]     = useState(false)
 
   const loadHistory = () => {
     getInventory().then(items =>
@@ -596,21 +598,32 @@ export default function InventoryManage() {
   const handleSaveEdit = async (item: InventoryItem) => {
     const qty = Number(editQty)
     if (!qty || qty < 1) return
-    await updateInventory(item.id, {
-      date: item.date, product_id: item.product_id,
-      quantity: qty, type: item.type, notes: item.notes ?? '',
-    })
-    setEditingId(null)
-    loadHistory()
+    setEditError(false)
+    try {
+      await updateInventory(item.id, {
+        date: item.date, product_id: item.product_id,
+        quantity: qty, type: item.type, notes: item.notes ?? '',
+      })
+      setEditingId(null)
+      loadHistory()
+    } catch {
+      setEditError(true)
+    }
   }
 
   const handleDeleteSelected = async () => {
     if (selectedIds.size === 0) return
     setDeleting(true)
-    await Promise.all([...selectedIds].map(id => deleteInventory(id)))
-    setSelectedIds(new Set())
-    setDeleting(false)
-    loadHistory()
+    setDeleteError(false)
+    try {
+      await Promise.all([...selectedIds].map(id => deleteInventory(id)))
+      setSelectedIds(new Set())
+      loadHistory()
+    } catch {
+      setDeleteError(true)
+    } finally {
+      setDeleting(false)
+    }
   }
 
   return (
@@ -638,6 +651,12 @@ export default function InventoryManage() {
         ? <SingleForm products={products} onAdded={loadHistory} />
         : <BulkForm products={products} onAdded={loadHistory} />
       }
+
+      {(deleteError || editError) && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+          {editError ? '수정에 실패했습니다.' : '삭제에 실패했습니다.'} 다시 시도해주세요.
+        </div>
+      )}
 
       {/* 입고 내역 */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm">

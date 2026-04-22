@@ -156,8 +156,9 @@ class ResolveIn(BaseModel):
 
 @app.post('/admin/seed-products')
 def seed_products_api(db: Session = Depends(get_db)):
-    if db.query(Product).count() > 0:
-        return {'ok': False, 'message': f'이미 {db.query(Product).count()}개 상품 존재'}
+    cnt = db.query(Product).count()
+    if cnt > 0:
+        return {'ok': False, 'message': f'이미 {cnt}개 상품 존재'}
     n = _do_seed(db)
     return {'ok': True, 'inserted': n}
 
@@ -271,6 +272,8 @@ def batch_delete_orders(body: dict, db: Session = Depends(get_db)):
 
 @app.post('/orders/bulk')
 def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
+    if len(data) > 500:
+        raise HTTPException(400, f'한 번에 최대 500건까지 등록 가능합니다 (요청: {len(data)}건)')
     valid_pids = {row[0] for row in db.query(Product.id).all()}
     ok = 0; fail = []
     for order_data in data:
@@ -306,6 +309,8 @@ def create_inventory(data: InventoryIn, db: Session = Depends(get_db)):
 
 @app.post('/inventory/bulk')
 def create_inventory_bulk(data: list[InventoryIn], db: Session = Depends(get_db)):
+    if len(data) > 500:
+        raise HTTPException(400, f'한 번에 최대 500건까지 등록 가능합니다 (요청: {len(data)}건)')
     valid_pids = {row[0] for row in db.query(Product.id).all()}
     ok = 0; fail = []
     for item_data in data:
@@ -474,8 +479,9 @@ def seed_default_rules(db: Session = Depends(get_db)):
     스프레드시트 출고관리 검색조건 기반 기본 규칙 자동 생성.
     이미 규칙이 있으면 건너뜀.
     """
-    if db.query(MappingRule).count() > 0:
-        return {'message': '이미 규칙이 존재합니다', 'count': db.query(MappingRule).count()}
+    cnt = db.query(MappingRule).count()
+    if cnt > 0:
+        return {'message': '이미 규칙이 존재합니다', 'count': cnt}
 
     products = {(p.name, p.color, p.size): p.id
                 for p in db.query(Product).all()}

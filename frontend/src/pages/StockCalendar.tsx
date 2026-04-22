@@ -37,10 +37,14 @@ export default function StockCalendar() {
   const monthStr = `${month}`
   const todayStr = dayjs().format('M.DD')  // e.g. "4.17"
 
+  const [loadError, setLoadError] = useState(false)
+
   useEffect(() => {
     setLoading(true)
+    setLoadError(false)
     Promise.all([getProducts(), getDailyOutbound(monthStr)])
       .then(([prods, daily]) => { setProducts(prods); setOutbound(daily) })
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false))
   }, [monthStr])
 
@@ -130,6 +134,12 @@ export default function StockCalendar() {
   return (
     <div className="flex h-full">
       <div className="flex-1 flex flex-col overflow-hidden">
+
+        {loadError && (
+          <div className="mx-6 mt-4 p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+            데이터 로드에 실패했습니다. 페이지를 새로고침 해주세요.
+          </div>
+        )}
 
         {/* ── 헤더 ── */}
         <div className="px-6 py-3 bg-white border-b border-slate-200 flex items-center justify-between">

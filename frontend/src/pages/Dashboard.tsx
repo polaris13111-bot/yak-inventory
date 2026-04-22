@@ -13,6 +13,7 @@ export default function Dashboard() {
   const [summaryMonth, setSummaryMonth] = useState<StockSummary[]>([])   // 이달 집계 (총출고용)
   const [todayOrders, setTodayOrders]   = useState<Order[]>([])
   const [loading, setLoading]           = useState(true)
+  const [error, setError]               = useState(false)
 
   useEffect(() => {
     Promise.all([
@@ -23,7 +24,8 @@ export default function Dashboard() {
       setSummaryAll(all)
       setSummaryMonth(monthly)
       setTodayOrders(orders)
-    }).finally(() => setLoading(false))
+    }).catch(() => setError(true))
+    .finally(() => setLoading(false))
   }, [])
 
   const lowStock  = summaryAll.filter(s => s.current_stock < 1)
@@ -36,6 +38,12 @@ export default function Dashboard() {
         <h1 className="text-2xl font-bold text-slate-800">대시보드</h1>
         <p className="text-sm text-slate-400 mt-1">{today.format('YYYY년 M월 D일')}</p>
       </div>
+
+      {error && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+          데이터 로드에 실패했습니다. 페이지를 새로고침 해주세요.
+        </div>
+      )}
 
       {/* 요약 카드 4개 */}
       <div className="grid grid-cols-4 gap-4">

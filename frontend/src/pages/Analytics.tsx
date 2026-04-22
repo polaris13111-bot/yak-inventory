@@ -23,6 +23,7 @@ export default function Analytics() {
   const [products, setProducts]         = useState<Product[]>([])
   const [outbound, setOutbound]         = useState<DailyOutbound[]>([])
   const [loading, setLoading]           = useState(true)
+  const [loadError, setLoadError]       = useState(false)
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [drillMode, setDrillMode]       = useState<'color' | 'size'>('color')
 
@@ -30,8 +31,10 @@ export default function Analytics() {
 
   useEffect(() => {
     setLoading(true)
+    setLoadError(false)
     Promise.all([getProducts(), getDailyOutbound(monthStr)])
       .then(([p, d]) => { setProducts(p); setOutbound(d) })
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false))
   }, [monthStr])
 
@@ -148,7 +151,11 @@ export default function Analytics() {
         </div>
       </div>
 
-      {loading ? (
+      {loadError ? (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+          데이터 로드에 실패했습니다. 페이지를 새로고침 해주세요.
+        </div>
+      ) : loading ? (
         <div className="flex items-center justify-center h-60 text-slate-400 text-sm">로딩 중...</div>
       ) : totalOutbound === 0 ? (
         <div className="flex items-center justify-center h-60 text-slate-300 text-sm">이번 달 출고 데이터가 없습니다</div>

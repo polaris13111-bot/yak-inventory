@@ -34,6 +34,7 @@ function OrderRow({
 }) {
   const [editing, setEditing] = useState(false)
   const [saving, setSaving]   = useState(false)
+  const [saveError, setSaveError] = useState(false)
   const [form, setForm] = useState<Partial<Order>>({})
 
   const startEdit = () => {
@@ -47,6 +48,7 @@ function OrderRow({
 
   const handleSave = async () => {
     setSaving(true)
+    setSaveError(false)
     try {
       const updated = await updateOrder(order.id, {
         date:       form.date       ?? order.date,
@@ -64,7 +66,7 @@ function OrderRow({
       onUpdated(updated)
       setEditing(false)
     } catch {
-      // 실패해도 편집 상태 유지
+      setSaveError(true)
     } finally {
       setSaving(false)
     }
@@ -103,15 +105,18 @@ function OrderRow({
             className="w-28 border border-blue-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-blue-400" />
         </td>
         <td className="px-4 py-2">
-          <div className="flex gap-1.5">
-            <button onClick={handleSave} disabled={saving}
-              className="text-green-500 hover:text-green-700 disabled:opacity-40">
-              <Check size={14} />
-            </button>
-            <button onClick={() => setEditing(false)} disabled={saving}
-              className="text-slate-400 hover:text-slate-600 disabled:opacity-40">
-              <X size={14} />
-            </button>
+          <div className="flex flex-col gap-1">
+            <div className="flex gap-1.5">
+              <button onClick={handleSave} disabled={saving}
+                className="text-green-500 hover:text-green-700 disabled:opacity-40">
+                <Check size={14} />
+              </button>
+              <button onClick={() => setEditing(false)} disabled={saving}
+                className="text-slate-400 hover:text-slate-600 disabled:opacity-40">
+                <X size={14} />
+              </button>
+            </div>
+            {saveError && <p className="text-[10px] text-red-500">저장 실패</p>}
           </div>
         </td>
       </tr>
@@ -158,13 +163,17 @@ export default function History() {
   const [selected, setSelected] = useState<Set<number>>(new Set())
   const [bulkDeleting, setBulkDeleting] = useState(false)
 
+  const [loadError, setLoadError] = useState(false)
+
   const loadAll = () => {
     setLoading(true)
+    setLoadError(false)
     Promise.all([getOrders(), getInventory()])
       .then(([o, inv]) => {
         setOrders([...o].reverse())
         setInv([...inv].reverse())
       })
+      .catch(() => setLoadError(true))
       .finally(() => setLoading(false))
   }
   useEffect(() => { loadAll() }, [])
@@ -283,6 +292,12 @@ export default function History() {
         <h1 className="text-2xl font-bold text-slate-800">내역 관리</h1>
         <p className="text-sm text-slate-400 mt-1">발주 · 입고 전체 누적 내역 조회 및 수정</p>
       </div>
+
+      {loadError && (
+        <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
+          데이터 로드에 실패했습니다. 페이지를 새로고침 해주세요.
+        </div>
+      )}
 
       <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
         <button onClick={() => setTab('orders')}
