@@ -274,16 +274,10 @@ def batch_delete_orders(body: dict, db: Session = Depends(get_db)):
 def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
     if len(data) > 500:
         raise HTTPException(400, f'한 번에 최대 500건까지 등록 가능합니다 (요청: {len(data)}건)')
-    valid_pids = {p.id for p in db.query(Product).all()}
-    ok = 0; fail = []
     for order_data in data:
-        if order_data.product_id not in valid_pids:
-            fail.append({'product_id': order_data.product_id, 'reason': '제품 없음'})
-            continue
         db.add(Order(**order_data.model_dump()))
-        ok += 1
     db.commit()
-    return {'ok': ok, 'fail': fail}
+    return {'ok': len(data), 'fail': []}
 
 
 # ─── 입고 ────────────────────────────────────────────────
@@ -311,16 +305,10 @@ def create_inventory(data: InventoryIn, db: Session = Depends(get_db)):
 def create_inventory_bulk(data: list[InventoryIn], db: Session = Depends(get_db)):
     if len(data) > 500:
         raise HTTPException(400, f'한 번에 최대 500건까지 등록 가능합니다 (요청: {len(data)}건)')
-    valid_pids = {p.id for p in db.query(Product).all()}
-    ok = 0; fail = []
     for item_data in data:
-        if item_data.product_id not in valid_pids:
-            fail.append({'product_id': item_data.product_id, 'reason': '제품 없음'})
-            continue
         db.add(InventoryItem(**item_data.model_dump()))
-        ok += 1
     db.commit()
-    return {'ok': ok, 'fail': fail}
+    return {'ok': len(data), 'fail': []}
 
 
 @app.put('/inventory/{item_id}', response_model=InventoryOut)
