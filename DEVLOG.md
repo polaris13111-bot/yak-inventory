@@ -87,11 +87,14 @@ GitHub main push
   - 자동 제품 매칭 (규칙 기반 → fuzzy 매칭)
   - 매칭 실패 시 후보 카드 표시, 직접 검색(캐스케이딩) 토글
   - 매칭 성공 행에 **✕ 수정** 버튼으로 재매칭 가능
-  - `Promise.allSettled` 병렬 등록 (40개 기준 순차 대비 ~40배 빠름)
+  - `/orders/bulk` 단일 트랜잭션으로 등록 (SQLite write lock 충돌 방지)
   - 실패 시 몇 행이 실패했는지 표시 + **다시하기** 버튼
 
 ### 입고 관리 (`/inventory`) — 관리자
 - 단건/대량 입고 등록
+- 최근 50건 내역 표시
+- 체크박스로 다중 선택 → **일괄 삭제**
+- 연필 아이콘 클릭 → **수량 인라인 수정** (Enter 저장, Esc 취소)
 
 ### 상품목록 (`/settings`) — 관리자
 - 상품 CRUD (이름/색상/사이즈/모델코드)
@@ -121,10 +124,10 @@ GitHub main push
 **원인**: `VITE_API_URL ?? ''`가 아닌 `VITE_API_URL || ''` 사용 — 빈 문자열이 falsy라 localhost로 폴백  
 **해결**: `??` (nullish coalescing) 연산자로 변경
 
-### 4. SQLite 동시 쓰기 실패
-**현상**: 대량 등록 40개 중 2개 랜덤 실패  
-**원인**: `Promise.allSettled`로 동시 요청 → SQLite write lock 충돌  
-**해결**: WAL 모드 + busy_timeout 설정
+### 4. SQLite 동시 쓰기 실패 (1차 → 2차 해결)
+**현상**: 대량 등록 40개 중 10개만 성공  
+**원인**: `Promise.allSettled`로 40개 동시 HTTP 요청 → SQLite는 한 번에 1개 writer만 허용 → write lock 경쟁  
+**1차 해결**: WAL 모드 + busy_timeout 설정 (부분 개선)
 
 ```python
 @event.listens_for(ENGINE, 'connect')
@@ -133,6 +136,24 @@ def _set_sqlite_pragmas(conn, _):
     cur.execute('PRAGMA journal_mode=WAL')
     cur.execute('PRAGMA busy_timeout=5000')
     cur.close()
+```
+
+**2차 해결 (근본 해결)**: `/orders/bulk` 엔드포인트 신설 → 프론트엔드에서 1개 HTTP 요청으로 전체 처리, 단일 DB 트랜잭션으로 commit 1회
+
+```python
+@app.post('/orders/bulk')
+def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
+    if len(data) > 500:
+        raise HTTPException(400, ...)
+    valid_pids = {row[0] for row in db.query(Product.id).all()}  # N+1 방지
+    ok = 0; fail = []
+    for order_data in data:
+        if order_data.product_id not in valid_pids:
+            fail.append(...); continue
+        db.add(Order(**order_data.model_dump()))
+        ok += 1
+    db.commit()  # 전체를 한 번에 commit
+    return {'ok': ok, 'fail': fail}
 ```
 
 ### 5. 콜드스타트 지연
@@ -144,6 +165,34 @@ def _set_sqlite_pragmas(conn, _):
 **현상**: 배포 후 상품 목록 0개  
 **원인**: `with SessionLocal() as db:` 패턴이 SQLAlchemy에서 제대로 동작 안 함  
 **해결**: 명시적 `db = SessionLocal()` + try/finally 패턴으로 교체
+
+### 7. 대시보드 로딩 느림 (N+1 쿼리)
+**현상**: 대시보드 진입 시 로딩 지연  
+**원인**: `/stock/summary`가 제품 N개 × 2쿼리 = 118회 쿼리 (GCS 환경에서 특히 느림)  
+**해결**: 집계 쿼리 3회로 교체 → **21배** 개선
+
+```python
+# 변경 전: 제품마다 개별 SUM 쿼리
+for p in products:
+    total_in  = db.query(func.sum(InventoryItem.quantity)).filter(...).scalar()
+    total_out = db.query(func.sum(Order.quantity)).filter(...).scalar()
+
+# 변경 후: 전체를 한 번에 집계
+inv_map = {r.product_id: r.total for r in
+           db.query(InventoryItem.product_id, func.sum(...)).group_by(...).all()}
+ord_map = {r.product_id: r.total for r in
+           db.query(Order.product_id, func.sum(...)).group_by(...).all()}
+```
+
+### 8. bulk 등록 N+1 쿼리
+**현상**: 100개 bulk 등록 시 느림  
+**원인**: product 존재 여부를 루프 안에서 `db.get(Product, id)` 호출 → N번 쿼리  
+**해결**: product ID 전체를 set으로 pre-load → 1회 쿼리 + O(1) set 조회 → **36배** 개선
+
+### 9. API 실패 시 로딩 화면 영구 멈춤
+**현상**: 네트워크 오류 시 로딩 스피너가 사라지지 않음  
+**원인**: Dashboard, History, StockCalendar, Analytics 4곳 모두 `Promise.all().then().finally()` 패턴에 `.catch()` 없음  
+**해결**: `.catch(() => setLoadError(true))` 추가 + 에러 메시지 UI 표시
 
 ---
 
@@ -192,6 +241,33 @@ VITE_API_URL="" npx vite build   # 실제 번들 빌드 테스트
 
 ---
 
+## API 엔드포인트 전체 목록
+
+| 메서드 | 경로 | 설명 |
+|--------|------|------|
+| GET | `/products` | 전체 제품 목록 |
+| POST | `/products` | 제품 등록 |
+| PUT | `/products/{id}` | 제품 수정 |
+| DELETE | `/products/{id}` | 제품 삭제 |
+| GET | `/orders` | 발주 목록 (month/date 필터) |
+| POST | `/orders` | 발주 단건 등록 |
+| POST | `/orders/bulk` | 발주 대량 등록 (단일 트랜잭션, 최대 500건) |
+| PUT | `/orders/{id}` | 발주 수정 |
+| DELETE | `/orders/{id}` | 발주 삭제 |
+| POST | `/orders/batch-delete` | 발주 다중 삭제 (`DELETE WHERE id IN`) |
+| GET | `/inventory` | 입고 목록 |
+| POST | `/inventory` | 입고 단건 등록 |
+| POST | `/inventory/bulk` | 입고 대량 등록 (단일 트랜잭션, 최대 500건) |
+| PUT | `/inventory/{id}` | 입고 수정 |
+| DELETE | `/inventory/{id}` | 입고 삭제 |
+| GET | `/stock/summary` | 재고 현황 집계 (3쿼리로 N+1 방지) |
+| GET | `/stock/daily` | 월별 일자별 출고 집계 |
+| GET/POST/PUT/DELETE | `/mapping-rules/...` | 매핑 규칙 CRUD |
+| POST | `/mapping-rules/resolve` | 상품명 텍스트 → product_id 자동 해석 |
+| POST | `/mapping-rules/seed-defaults` | 기본 매핑 규칙 자동 생성 |
+
+---
+
 ## 환경 변수
 
 | 변수 | 값 | 설명 |
@@ -213,6 +289,21 @@ VITE_API_URL="" npx vite build   # 실제 번들 빌드 테스트
 | Artifact Registry | `asia-northeast3-docker.pkg.dev/blackyak-493519/yak-inventory/app` |
 | GCS 버킷 | `yak-inventory-data` |
 | WIF 서비스 계정 | `github-deploy@blackyak-493519.iam.gserviceaccount.com` |
+
+---
+
+## GitHub MCP 설정
+
+Claude Code에서 GitHub Actions 로그를 직접 조회할 수 있도록 MCP 연결.
+
+```bash
+claude mcp add github -s user \
+  -e GITHUB_PERSONAL_ACCESS_TOKEN=<토큰> \
+  -- npx -y @modelcontextprotocol/server-github
+```
+
+- 저장소: `polaris13111-bot/yak-inventory`
+- 효과: 빌드 실패 시 Actions 로그를 복붙 없이 Claude가 직접 확인
 
 ---
 
