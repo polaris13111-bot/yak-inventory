@@ -4,8 +4,9 @@ import dayjs from 'dayjs'
 import {
   BarChart, Bar, XAxis, YAxis, Tooltip, ResponsiveContainer, Cell,
   LineChart, Line, CartesianGrid,
-  PieChart, Pie, Legend,
+  PieChart, Pie,
 } from 'recharts'
+import type { PieLabelRenderProps } from 'recharts'
 import { getProducts, getDailyOutbound } from '../api'
 import type { Product, DailyOutbound } from '../types'
 import { getColorHex } from '../utils/colors'
@@ -17,13 +18,13 @@ const CHART_COLORS = [
 ]
 
 export default function Analytics() {
-  const [month, setMonth]           = useState(dayjs().month() + 1)
-  const [year]                      = useState(dayjs().year())
-  const [products, setProducts]     = useState<Product[]>([])
-  const [outbound, setOutbound]     = useState<DailyOutbound[]>([])
-  const [loading, setLoading]       = useState(true)
+  const [month, setMonth]               = useState(dayjs().month() + 1)
+  const [year]                          = useState(dayjs().year())
+  const [products, setProducts]         = useState<Product[]>([])
+  const [outbound, setOutbound]         = useState<DailyOutbound[]>([])
+  const [loading, setLoading]           = useState(true)
   const [selectedName, setSelectedName] = useState<string | null>(null)
-  const [drillMode, setDrillMode]   = useState<'color' | 'size'>('color')
+  const [drillMode, setDrillMode]       = useState<'color' | 'size'>('color')
 
   const monthStr = `${month}`
 
@@ -34,14 +35,13 @@ export default function Analytics() {
       .finally(() => setLoading(false))
   }, [monthStr])
 
-  // product_id → product 매핑
   const productMap = useMemo(() => {
     const m: Record<number, Product> = {}
     for (const p of products) m[p.id] = p
     return m
   }, [products])
 
-  // ── 가로 막대: 제품명별 합계 ──────────────────────────────
+  // 제품명별 합계
   const barData = useMemo(() => {
     const totals: Record<string, number> = {}
     for (const row of outbound) {
@@ -54,7 +54,7 @@ export default function Analytics() {
       .sort((a, b) => b.total - a.total)
   }, [outbound, productMap])
 
-  // ── 라인: 일별 총 출고량 ────────────────────────────────
+  // 일별 총 출고
   const daysInMonth = dayjs(`${year}-${String(month).padStart(2,'0')}-01`).daysInMonth()
   const lineData = useMemo(() => {
     const daily: Record<string, number> = {}
@@ -66,7 +66,7 @@ export default function Analytics() {
     })
   }, [outbound, daysInMonth, month])
 
-  // ── 도넛: 선택 제품의 색상 or 사이즈별 ─────────────────
+  // 드릴다운: 선택 제품 색상/사이즈별
   const donutData = useMemo(() => {
     if (!selectedName) return []
     const selectedIds = new Set(products.filter(p => p.name === selectedName).map(p => p.id))
@@ -83,8 +83,10 @@ export default function Analytics() {
   }, [selectedName, drillMode, outbound, products, productMap])
 
   const totalOutbound = barData.reduce((s, d) => s + d.total, 0)
+  const donutTotal    = donutData.reduce((s, d) => s + d.value, 0)
 
-  const CustomBarTooltip = ({ active, payload }: { active?: boolean; payload?: { payload: { name: string; total: number } }[] }) => {
+  // 커스텀 툴팁
+  const BarTip = ({ active, payload }: { active?: boolean; payload?: { payload: { name: string; total: number } }[] }) => {
     if (!active || !payload?.length) return null
     const { name, total } = payload[0].payload
     return (
@@ -96,7 +98,7 @@ export default function Analytics() {
     )
   }
 
-  const CustomLineTooltip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
+  const LineTip = ({ active, payload, label }: { active?: boolean; payload?: { value: number }[]; label?: string }) => {
     if (!active || !payload?.length) return null
     return (
       <div className="bg-white border border-slate-200 rounded-xl shadow-lg px-3 py-2 text-xs">
@@ -106,16 +108,15 @@ export default function Analytics() {
     )
   }
 
-  const CustomDonutLabel = ({ cx, cy, midAngle, innerRadius, outerRadius, value, index }: {
-    cx: number; cy: number; midAngle: number
-    innerRadius: number; outerRadius: number; value: number; index: number
-  }) => {
+  // 도넛 내부 퍼센트 레이블
+  const DonutLabel = (props: PieLabelRenderProps) => {
+    const { cx, cy, midAngle, innerRadius, outerRadius, value } = props
+    if (cx == null || cy == null || midAngle == null || innerRadius == null || outerRadius == null || value == null) return null
     const RADIAN = Math.PI / 180
-    const r = innerRadius + (outerRadius - innerRadius) * 0.5
-    const x = cx + r * Math.cos(-midAngle * RADIAN)
-    const y = cy + r * Math.sin(-midAngle * RADIAN)
-    const total = donutData.reduce((s, d) => s + d.value, 0)
-    const pct = ((value / total) * 100).toFixed(0)
+    const r = Number(innerRadius) + (Number(outerRadius) - Number(innerRadius)) * 0.5
+    const x = Number(cx) + r * Math.cos(-Number(midAngle) * RADIAN)
+    const y = Number(cy) + r * Math.sin(-Number(midAngle) * RADIAN)
+    const pct = donutTotal > 0 ? ((Number(value) / donutTotal) * 100).toFixed(0) : '0'
     if (Number(pct) < 8) return null
     return (
       <text x={x} y={y} fill="white" textAnchor="middle" dominantBaseline="central"
@@ -169,7 +170,7 @@ export default function Analytics() {
 
           <div className="grid grid-cols-5 gap-4">
 
-            {/* ── 가로 막대: 제품명별 ── */}
+            {/* 가로 막대: 제품명별 */}
             <div className="col-span-3 bg-white rounded-xl border border-slate-100 shadow-sm p-5">
               <div className="flex items-center gap-2 mb-4">
                 <BarChart2 size={16} className="text-blue-500" />
@@ -180,8 +181,9 @@ export default function Analytics() {
                 <BarChart data={barData} layout="vertical" margin={{ left: 8, right: 40, top: 0, bottom: 0 }}>
                   <XAxis type="number" tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                   <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
-                  <Tooltip content={<CustomBarTooltip />} cursor={{ fill: '#f1f5f9' }} />
-                  <Bar dataKey="total" radius={[0, 4, 4, 0]} onClick={d => setSelectedName(n => n === d.name ? null : d.name)}>
+                  <Tooltip content={<BarTip />} cursor={{ fill: '#f1f5f9' }} />
+                  <Bar dataKey="total" radius={[0, 4, 4, 0]}
+                    onClick={(data: { name: string }) => setSelectedName(prev => prev === data.name ? null : data.name)}>
                     {barData.map((entry, i) => (
                       <Cell key={i}
                         fill={selectedName === entry.name ? '#1d4ed8' : '#3b82f6'}
@@ -194,7 +196,7 @@ export default function Analytics() {
               </ResponsiveContainer>
             </div>
 
-            {/* ── 도넛: 드릴다운 ── */}
+            {/* 도넛: 드릴다운 */}
             <div className="col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm p-5 flex flex-col">
               {selectedName ? (
                 <>
@@ -225,29 +227,28 @@ export default function Analytics() {
                         <PieChart>
                           <Pie data={donutData} dataKey="value" nameKey="label"
                             cx="50%" cy="50%" innerRadius={45} outerRadius={80}
-                            labelLine={false} label={CustomDonutLabel}>
+                            labelLine={false} label={DonutLabel}>
                             {donutData.map((entry, i) => (
                               <Cell key={i}
                                 fill={drillMode === 'color' ? getColorHex(entry.label) : CHART_COLORS[i % CHART_COLORS.length]}
                               />
                             ))}
                           </Pie>
-                          <Tooltip formatter={(v: number, n: string) => [`${v}개`, n]} />
+                          <Tooltip formatter={(v) => [`${v}개`]} />
                         </PieChart>
                       </ResponsiveContainer>
                       <div className="mt-2 space-y-1.5">
-                        {donutData.map((d, i) => {
-                          const total = donutData.reduce((s, x) => s + x.value, 0)
-                          return (
-                            <div key={d.label} className="flex items-center gap-2 text-xs">
-                              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
-                                style={{ background: drillMode === 'color' ? getColorHex(d.label) : CHART_COLORS[i % CHART_COLORS.length] }} />
-                              <span className="text-slate-600 flex-1 truncate">{d.label}</span>
-                              <span className="font-semibold text-slate-800">{d.value}개</span>
-                              <span className="text-slate-400 w-10 text-right">{((d.value / total) * 100).toFixed(0)}%</span>
-                            </div>
-                          )
-                        })}
+                        {donutData.map((d, i) => (
+                          <div key={d.label} className="flex items-center gap-2 text-xs">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0"
+                              style={{ background: drillMode === 'color' ? getColorHex(d.label) : CHART_COLORS[i % CHART_COLORS.length] }} />
+                            <span className="text-slate-600 flex-1 truncate">{d.label}</span>
+                            <span className="font-semibold text-slate-800">{d.value}개</span>
+                            <span className="text-slate-400 w-10 text-right">
+                              {donutTotal > 0 ? ((d.value / donutTotal) * 100).toFixed(0) : 0}%
+                            </span>
+                          </div>
+                        ))}
                       </div>
                     </>
                   )}
@@ -261,7 +262,7 @@ export default function Analytics() {
             </div>
           </div>
 
-          {/* ── 라인: 일별 총 출고 추이 ── */}
+          {/* 라인: 일별 총 출고 추이 */}
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-5">
             <div className="flex items-center gap-2 mb-4">
               <TrendingUp size={16} className="text-emerald-500" />
@@ -273,7 +274,7 @@ export default function Analytics() {
                 <XAxis dataKey="day" tick={{ fontSize: 10 }} axisLine={false} tickLine={false}
                   interval={Math.floor(daysInMonth / 10)} />
                 <YAxis tick={{ fontSize: 10 }} axisLine={false} tickLine={false} width={28} />
-                <Tooltip content={<CustomLineTooltip />} />
+                <Tooltip content={<LineTip />} />
                 <Line type="monotone" dataKey="qty" stroke="#3b82f6" strokeWidth={2}
                   dot={false} activeDot={{ r: 4, fill: '#3b82f6' }} />
               </LineChart>
