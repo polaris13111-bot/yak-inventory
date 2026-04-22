@@ -273,9 +273,10 @@ def batch_delete_orders(body: dict, db: Session = Depends(get_db)):
 
 @app.post('/orders/bulk')
 def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
+    valid_pids = {row[0] for row in db.query(Product.id).all()}
     ok = 0; fail = []
     for order_data in data:
-        if not db.get(Product, order_data.product_id):
+        if order_data.product_id not in valid_pids:
             fail.append({'product_id': order_data.product_id, 'reason': '제품 없음'})
             continue
         db.add(Order(**order_data.model_dump()))
@@ -307,9 +308,10 @@ def create_inventory(data: InventoryIn, db: Session = Depends(get_db)):
 
 @app.post('/inventory/bulk')
 def create_inventory_bulk(data: list[InventoryIn], db: Session = Depends(get_db)):
+    valid_pids = {row[0] for row in db.query(Product.id).all()}
     ok = 0; fail = []
     for item_data in data:
-        if not db.get(Product, item_data.product_id):
+        if item_data.product_id not in valid_pids:
             fail.append({'product_id': item_data.product_id, 'reason': '제품 없음'})
             continue
         db.add(InventoryItem(**item_data.model_dump()))
