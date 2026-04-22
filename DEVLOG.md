@@ -129,31 +129,15 @@ GitHub main push
 **원인**: `Promise.allSettled`로 40개 동시 HTTP 요청 → SQLite는 한 번에 1개 writer만 허용 → write lock 경쟁  
 **1차 해결**: WAL 모드 + busy_timeout 설정 (부분 개선)
 
-```python
-@event.listens_for(ENGINE, 'connect')
-def _set_sqlite_pragmas(conn, _):
-    cur = conn.cursor()
-    cur.execute('PRAGMA journal_mode=WAL')
-    cur.execute('PRAGMA busy_timeout=5000')
-    cur.close()
-```
-
 **2차 해결 (근본 해결)**: `/orders/bulk` 엔드포인트 신설 → 프론트엔드에서 1개 HTTP 요청으로 전체 처리, 단일 DB 트랜잭션으로 commit 1회
 
 ```python
 @app.post('/orders/bulk')
 def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
-    if len(data) > 500:
-        raise HTTPException(400, ...)
-    valid_pids = {row[0] for row in db.query(Product.id).all()}  # N+1 방지
-    ok = 0; fail = []
     for order_data in data:
-        if order_data.product_id not in valid_pids:
-            fail.append(...); continue
         db.add(Order(**order_data.model_dump()))
-        ok += 1
     db.commit()  # 전체를 한 번에 commit
-    return {'ok': ok, 'fail': fail}
+    return {'ok': len(data), 'fail': []}
 ```
 
 ### 5. 콜드스타트 지연
@@ -193,6 +177,63 @@ ord_map = {r.product_id: r.total for r in
 **현상**: 네트워크 오류 시 로딩 스피너가 사라지지 않음  
 **원인**: Dashboard, History, StockCalendar, Analytics 4곳 모두 `Promise.all().then().finally()` 패턴에 `.catch()` 없음  
 **해결**: `.catch(() => setLoadError(true))` 추가 + 에러 메시지 UI 표시
+
+---
+
+### 10. GCS FUSE stat-cache stale read — bulk 등록 간헐적 실패 (최종 해결)
+
+**현상**: `/orders/bulk` 로 75개 전송 시 27개만 성공, 46개 "제품 없음" 실패. 재시도할수록 조금씩 성공이 늘어남.
+
+**원인 분석**:
+
+SQLite는 DB 파일을 열 때 `fstat()`으로 파일 크기를 확인하고, 그 크기 범위 안의 페이지만 랜덤 접근으로 읽는다.  
+GCS FUSE는 파일 메타데이터(크기, mtime)를 일정 시간 **stat-cache**에 캐시하는데, 이 캐시가 stale하면 실제보다 작은 파일 크기를 반환한다.
+
+```
+실제 yak.db = 400KB (상품 59개)
+GCS FUSE fstat() 캐시 = 200KB (예전 값)
+→ SQLite: "200KB까지만 읽겠다"
+→ 뒤쪽 페이지에 저장된 상품들 → 읽지 못함
+→ db.query(Product).all()이 59개 중 27개만 반환
+→ 나머지 32개 product_id → "제품 없음" 처리
+```
+
+**재시도할수록 성공이 늘어나는 이유**: 요청마다 GCS FUSE가 일부 페이지를 커널 캐시에 올리고, 캐시가 쌓일수록 stat 불일치 범위가 줄어들어 점점 더 많은 상품을 읽게 됨.
+
+**시도한 임시 조치 (모두 실패)**:
+- WAL → DELETE 저널 모드 변경: WAL의 POSIX lock 문제는 해결했지만 stat-cache 문제는 별개
+- `db.query(Product).all()` 쿼리 방식 변경: 근본 원인(partial read)은 그대로
+- product_id 사전 검증 제거: 증상 우회이며 데이터 무결성 포기
+
+**최종 해결 (`models.py` + `main.py`)**:
+
+```
+읽기: GCS FUSE 완전 우회
+  → shutil.copy2('/data/yak.db', '/tmp/yak.db') (기동 시 1회)
+  → shutil은 순차 EOF 읽기 → fstat() 무시 → 파일 전체 복사 보장
+  → 이후 모든 SQLAlchemy 읽기/쓰기는 /tmp (RAM, 신뢰 가능)
+
+쓰기: 영속성 유지
+  → POST/PUT/DELETE 완료 후 백그라운드로
+  → shutil.copy2('/tmp/yak.db', '/data/yak.db') (GCS FUSE에 동기화)
+```
+
+```python
+# models.py — 기동 시 /tmp로 복사
+if _GCS_DB and os.path.exists(_GCS_DB):
+    shutil.copy2(_GCS_DB, _TMP_DB)   # 전체 순차 복사 (stat 우회)
+_db_url = f'sqlite:////{_TMP_DB}'    # 이후 SQLAlchemy는 /tmp 사용
+
+# main.py — 쓰기 후 미들웨어로 sync
+@app.middleware('http')
+async def _gcs_sync_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.method in ('POST', 'PUT', 'DELETE'):
+        asyncio.create_task(asyncio.to_thread(_sync_db))  # 백그라운드
+    return response
+```
+
+**핵심 인사이트**: `shutil.copy2`는 `read()` 반환값 0(EOF)으로 복사 완료를 판단하며 `fstat()` 파일 크기를 사용하지 않는다. 따라서 stat-cache가 stale해도 파일 전체가 복사된다. `/tmp`는 RAM 기반이므로 이후 모든 SQLite 읽기에서 partial read가 발생하지 않는다.
 
 ---
 
@@ -307,4 +348,4 @@ claude mcp add github -s user \
 
 ---
 
-*마지막 업데이트: 2026-04-22*
+*마지막 업데이트: 2026-04-22 (이슈 #10 GCS FUSE stale read 근본 해결)*
