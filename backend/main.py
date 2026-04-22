@@ -271,6 +271,18 @@ def batch_delete_orders(body: dict, db: Session = Depends(get_db)):
     db.commit()
     return {'deleted': deleted}
 
+@app.post('/orders/bulk')
+def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
+    ok = 0; fail = []
+    for order_data in data:
+        if not db.get(Product, order_data.product_id):
+            fail.append({'product_id': order_data.product_id, 'reason': '제품 없음'})
+            continue
+        db.add(Order(**order_data.model_dump()))
+        ok += 1
+    db.commit()
+    return {'ok': ok, 'fail': fail}
+
 
 # ─── 입고 ────────────────────────────────────────────────
 
@@ -304,6 +316,30 @@ def create_inventory_bulk(data: list[InventoryIn], db: Session = Depends(get_db)
         ok += 1
     db.commit()
     return {'ok': ok, 'fail': fail}
+
+
+@app.put('/inventory/{item_id}', response_model=InventoryOut)
+def update_inventory(item_id: int, data: InventoryIn, db: Session = Depends(get_db)):
+    item = db.get(InventoryItem, item_id)
+    if not item:
+        raise HTTPException(404, '입고 항목을 찾을 수 없습니다')
+    if not db.get(Product, data.product_id):
+        raise HTTPException(404, '제품을 찾을 수 없습니다')
+    for k, v in data.model_dump().items():
+        setattr(item, k, v)
+    db.commit()
+    db.refresh(item)
+    return item
+
+
+@app.delete('/inventory/{item_id}')
+def delete_inventory(item_id: int, db: Session = Depends(get_db)):
+    item = db.get(InventoryItem, item_id)
+    if not item:
+        raise HTTPException(404, '입고 항목을 찾을 수 없습니다')
+    db.delete(item)
+    db.commit()
+    return {'ok': True}
 
 
 # ─── 재고 현황 ───────────────────────────────────────────

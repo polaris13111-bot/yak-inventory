@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, Fragment } from 'react'
 import { CheckCircle, ChevronDown, Upload, ClipboardPaste, Trash2, AlertCircle, HelpCircle } from 'lucide-react'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
-import { getProducts, createOrder } from '../api'
+import { getProducts, createOrder, createOrdersBulk } from '../api'
 import type { Product } from '../types'
 import { autoMatch, findCandidates, scoreLabel, matchTypeBadge } from '../utils/matcher'
 import type { MatchResult } from '../utils/matcher'
@@ -362,21 +362,26 @@ function BulkForm({ products }: { products: Product[] }) {
   const addRow = () => setRows(prev => [...prev, EMPTY_ROW()])
 
   const submitItems = async (items: BulkRow[]) => {
-    const withIdx = items.map((r, i) => ({ r, origIdx: rows.indexOf(r, i) }))
-    const results = await Promise.allSettled(
-      withIdx.map(({ r }) => createOrder({
-        date: r.date, product_id: r._resolved!.id, quantity: Number(r.quantity),
-        order_date: r.order_date, storage: r.storage, mall: r.mall,
-        orderer: r.orderer, recipient: r.recipient, phone: r.phone,
-        address: r.address, memo: r.memo,
-      }))
-    )
-    const ok        = results.filter(r => r.status === 'fulfilled').length
-    const failItems = results
-      .map((r, i) => r.status === 'rejected' ? withIdx[i].r : null)
-      .filter((v): v is BulkRow => v !== null)
-    const failRows  = failItems.map(r => (rows.indexOf(r) + 1))
-    return { ok, failItems, failRows }
+    const payload = items.map(r => ({
+      date: r.date, product_id: r._resolved!.id, quantity: Number(r.quantity),
+      order_date: r.order_date, storage: r.storage, mall: r.mall,
+      orderer: r.orderer, recipient: r.recipient, phone: r.phone,
+      address: r.address, memo: r.memo,
+    }))
+    try {
+      const res = await createOrdersBulk(payload)
+      const failPids = res.fail.map(f => f.product_id)
+      const failItems: BulkRow[] = []
+      const usedIndices = new Set<number>()
+      for (const pid of failPids) {
+        const idx = items.findIndex((r, i) => !usedIndices.has(i) && r._resolved?.id === pid)
+        if (idx >= 0) { failItems.push(items[idx]); usedIndices.add(idx) }
+      }
+      const failRows = failItems.map(r => rows.indexOf(r) + 1)
+      return { ok: res.ok, failItems, failRows }
+    } catch {
+      return { ok: 0, failItems: items, failRows: items.map(r => rows.indexOf(r) + 1) }
+    }
   }
 
   const handleSubmit = async () => {

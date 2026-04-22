@@ -44,6 +44,15 @@ export const createInventory = (data: Omit<InventoryItem, 'id' | 'created_at' | 
 export const createInventoryBulk = (data: Omit<InventoryItem, 'id' | 'created_at' | 'product'>[]) =>
   api.post<{ ok: number; fail: { product_id: number; reason: string }[] }>('/inventory/bulk', data).then(r => r.data)
 
+export const updateInventory = (id: number, data: Omit<InventoryItem, 'id' | 'created_at' | 'product'>) =>
+  api.put<InventoryItem>(`/inventory/${id}`, data).then(r => r.data)
+
+export const deleteInventory = (id: number) =>
+  api.delete(`/inventory/${id}`)
+
+export const createOrdersBulk = (data: Omit<Order, 'id' | 'created_at' | 'product'>[]) =>
+  api.post<{ ok: number; fail: { product_id: number; reason: string }[] }>('/orders/bulk', data).then(r => r.data)
+
 // 재고 현황
 export const getStockSummary = (month?: string) =>
   api.get<StockSummary[]>('/stock/summary', { params: { month } }).then(r => r.data)

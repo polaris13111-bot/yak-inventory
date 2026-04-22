@@ -1,8 +1,8 @@
 import { useState, useEffect, useRef, Fragment } from 'react'
-import { PackagePlus, RotateCcw, CheckCircle, ChevronDown, ClipboardPaste, Upload, Trash2, AlertCircle } from 'lucide-react'
+import { PackagePlus, RotateCcw, CheckCircle, ChevronDown, ClipboardPaste, Upload, Trash2, AlertCircle, Pencil, X, Check } from 'lucide-react'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
-import { getProducts, getInventory, createInventory, createInventoryBulk } from '../api'
+import { getProducts, getInventory, createInventory, createInventoryBulk, updateInventory, deleteInventory } from '../api'
 import type { Product, InventoryItem } from '../types'
 import { autoMatch, findCandidates } from '../utils/matcher'
 import type { MatchResult } from '../utils/matcher'
@@ -568,10 +568,14 @@ export default function InventoryManage() {
   const [inputMode, setInputMode] = useState<'single' | 'bulk'>('single')
   const [products, setProducts]   = useState<Product[]>([])
   const [history, setHistory]     = useState<InventoryItem[]>([])
+  const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
+  const [editingId, setEditingId]     = useState<number | null>(null)
+  const [editQty, setEditQty]         = useState('')
+  const [deleting, setDeleting]       = useState(false)
 
   const loadHistory = () => {
     getInventory().then(items =>
-      setHistory([...items].reverse().slice(0, 20))
+      setHistory([...items].reverse().slice(0, 50))
     )
   }
 
@@ -579,6 +583,35 @@ export default function InventoryManage() {
     getProducts().then(setProducts)
     loadHistory()
   }, [])
+
+  const toggleSelect = (id: number) => setSelectedIds(prev => {
+    const s = new Set(prev); s.has(id) ? s.delete(id) : s.add(id); return s
+  })
+
+  const toggleAll = () => {
+    if (selectedIds.size === history.length) setSelectedIds(new Set())
+    else setSelectedIds(new Set(history.map(i => i.id)))
+  }
+
+  const handleSaveEdit = async (item: InventoryItem) => {
+    const qty = Number(editQty)
+    if (!qty || qty < 1) return
+    await updateInventory(item.id, {
+      date: item.date, product_id: item.product_id,
+      quantity: qty, type: item.type, notes: item.notes ?? '',
+    })
+    setEditingId(null)
+    loadHistory()
+  }
+
+  const handleDeleteSelected = async () => {
+    if (selectedIds.size === 0) return
+    setDeleting(true)
+    await Promise.all([...selectedIds].map(id => deleteInventory(id)))
+    setSelectedIds(new Set())
+    setDeleting(false)
+    loadHistory()
+  }
 
   return (
     <div className="p-6 max-w-4xl space-y-6">
@@ -608,29 +641,75 @@ export default function InventoryManage() {
 
       {/* 입고 내역 */}
       <div className="bg-white rounded-xl border border-slate-100 shadow-sm">
-        <div className="px-5 py-4 border-b border-slate-100">
-          <h2 className="font-semibold text-slate-700 text-sm">최근 입고 내역 (최근 20건)</h2>
+        <div className="px-5 py-4 border-b border-slate-100 flex items-center justify-between">
+          <h2 className="font-semibold text-slate-700 text-sm">최근 입고 내역 (최근 50건)</h2>
+          {selectedIds.size > 0 && (
+            <button onClick={handleDeleteSelected} disabled={deleting}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-red-500 text-white text-xs font-semibold rounded-lg hover:bg-red-600 transition-colors disabled:opacity-50">
+              <Trash2 size={13} />{selectedIds.size}건 삭제
+            </button>
+          )}
         </div>
         <div className="divide-y divide-slate-100">
           {history.length === 0 ? (
             <p className="text-sm text-slate-400 text-center py-8">입고 내역 없음</p>
-          ) : history.map(item => (
-            <div key={item.id} className="flex items-center justify-between px-5 py-3">
-              <div className="flex items-center gap-3">
-                <span className={`text-xs px-2 py-0.5 rounded font-medium
-                  ${item.type === 'normal' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                  {item.type === 'normal' ? '정상' : '반품'}
-                </span>
-                <div>
-                  <p className="text-sm text-slate-700">
-                    {item.product ? `${item.product.name} / ${item.product.color} / ${item.product.size}` : `제품 #${item.product_id}`}
-                  </p>
-                  <p className="text-xs text-slate-400">{item.date}</p>
-                </div>
+          ) : (
+            <>
+              {/* 전체 선택 행 */}
+              <div className="flex items-center gap-3 px-5 py-2 bg-slate-50">
+                <input type="checkbox"
+                  checked={selectedIds.size === history.length && history.length > 0}
+                  onChange={toggleAll}
+                  className="w-3.5 h-3.5 accent-blue-600 cursor-pointer" />
+                <span className="text-xs text-slate-400">전체 선택</span>
               </div>
-              <span className="text-sm font-bold text-slate-700">+{item.quantity}</span>
-            </div>
-          ))}
+              {history.map(item => (
+                <div key={item.id} className={`flex items-center gap-3 px-5 py-3 transition-colors
+                  ${selectedIds.has(item.id) ? 'bg-red-50' : ''}`}>
+                  <input type="checkbox"
+                    checked={selectedIds.has(item.id)}
+                    onChange={() => toggleSelect(item.id)}
+                    className="w-3.5 h-3.5 accent-red-500 cursor-pointer flex-shrink-0" />
+                  <span className={`text-xs px-2 py-0.5 rounded font-medium flex-shrink-0
+                    ${item.type === 'normal' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+                    {item.type === 'normal' ? '정상' : '반품'}
+                  </span>
+                  <div className="flex-1 min-w-0">
+                    <p className="text-sm text-slate-700 truncate">
+                      {item.product ? `${item.product.name} / ${item.product.color} / ${item.product.size}` : `제품 #${item.product_id}`}
+                    </p>
+                    <p className="text-xs text-slate-400">{item.date}{item.notes ? ` · ${item.notes}` : ''}</p>
+                  </div>
+                  {editingId === item.id ? (
+                    <div className="flex items-center gap-1.5 flex-shrink-0">
+                      <input
+                        type="number" value={editQty} min="1"
+                        onChange={e => setEditQty(e.target.value)}
+                        onKeyDown={e => { if (e.key === 'Enter') handleSaveEdit(item); if (e.key === 'Escape') setEditingId(null) }}
+                        autoFocus
+                        className="w-16 px-2 py-1 border border-blue-400 rounded text-sm text-center font-bold focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                      <button onClick={() => handleSaveEdit(item)}
+                        className="p-1 text-green-600 hover:text-green-700 transition-colors">
+                        <Check size={15} />
+                      </button>
+                      <button onClick={() => setEditingId(null)}
+                        className="p-1 text-slate-400 hover:text-slate-600 transition-colors">
+                        <X size={15} />
+                      </button>
+                    </div>
+                  ) : (
+                    <div className="flex items-center gap-2 flex-shrink-0">
+                      <span className="text-sm font-bold text-slate-700">+{item.quantity}</span>
+                      <button onClick={() => { setEditingId(item.id); setEditQty(String(item.quantity)) }}
+                        className="p-1 text-slate-300 hover:text-blue-500 transition-colors">
+                        <Pencil size={13} />
+                      </button>
+                    </div>
+                  )}
+                </div>
+              ))}
+            </>
+          )}
         </div>
       </div>
     </div>
