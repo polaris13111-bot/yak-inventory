@@ -183,7 +183,7 @@ export default function Analytics() {
                   <YAxis type="category" dataKey="name" width={130} tick={{ fontSize: 11 }} axisLine={false} tickLine={false} />
                   <Tooltip content={<BarTip />} cursor={{ fill: '#f1f5f9' }} />
                   <Bar dataKey="total" radius={[0, 4, 4, 0]}
-                    onClick={(data: { name: string }) => setSelectedName(prev => prev === data.name ? null : data.name)}>
+                    onClick={(data) => { if (data.name != null) setSelectedName(prev => prev === data.name ? null : data.name as string) }}>
                     {barData.map((entry, i) => (
                       <Cell key={i}
                         fill={selectedName === entry.name ? '#1d4ed8' : '#3b82f6'}
