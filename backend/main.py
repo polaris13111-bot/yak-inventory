@@ -1,7 +1,9 @@
+import asyncio
 import json
 import os
+import shutil
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Depends
+from fastapi import FastAPI, HTTPException, Depends, Request
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse
@@ -15,6 +17,15 @@ from models import ENGINE, init_db, Product, Order, InventoryItem, InventoryType
 
 init_db()
 SessionLocal = sessionmaker(bind=ENGINE)
+
+# ── GCS 동기화: 쓰기 후 /tmp/yak.db → /data/yak.db 복사 ──
+def _sync_db():
+    """쓰기 작업 완료 후 /tmp DB를 GCS FUSE(/data)로 동기화."""
+    if os.path.exists('/tmp/yak.db') and os.path.isdir('/data'):
+        try:
+            shutil.copy2('/tmp/yak.db', '/data/yak.db')
+        except Exception as e:
+            print(f'[sync] {e}')
 
 # ── 시드 데이터 (DB가 비어있을 때 상품 자동 등록) ─────────
 def _do_seed(db):
@@ -37,6 +48,7 @@ def _seed_products():
             if db.query(Product).count() == 0:
                 n = _do_seed(db)
                 print(f'[seed] 상품 {n}개 등록 완료')
+                _sync_db()  # 최초 시드 후 GCS에 반영
         finally:
             db.close()
     except Exception as e:
@@ -45,6 +57,14 @@ def _seed_products():
 _seed_products()
 
 app = FastAPI(title='야크 재고관리 API')
+
+# ── GCS 동기화 미들웨어: POST/PUT/DELETE 후 백그라운드 sync ──
+@app.middleware('http')
+async def _gcs_sync_middleware(request: Request, call_next):
+    response = await call_next(request)
+    if request.method in ('POST', 'PUT', 'DELETE'):
+        asyncio.create_task(asyncio.to_thread(_sync_db))
+    return response
 
 app.add_middleware(
     CORSMiddleware,

@@ -2,19 +2,38 @@ from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime, Foreign
 from sqlalchemy.orm import declarative_base, relationship
 from datetime import datetime
 import enum
-
 import os
+import shutil
 
 Base = declarative_base()
-# 프로덕션(Cloud Run): DATABASE_URL=/data/yak.db (GCS 마운트)
-# 로컬: 현재 디렉토리의 yak.db
-_db_url = os.getenv('DATABASE_URL', 'sqlite:///./yak.db')
+
+# ── DB 경로 설정 ──────────────────────────────────────────────
+# GCS FUSE(Cloud Run) + SQLite 문제:
+#   fstat() stat-cache가 stale → SQLite가 파일 일부만 읽음 → partial read
+# 해결: shutil.copy2로 전체 파일을 /tmp에 복사(순차 EOF 읽기, stat 우회),
+#       이후 모든 DB 작업은 /tmp/yak.db 사용 (RAM 기반, 신뢰 가능).
+_db_url_env = os.getenv('DATABASE_URL', 'sqlite:///./yak.db')
+_GCS_DB  = _db_url_env.replace('sqlite:////', '') if _db_url_env.startswith('sqlite:////data/') else None
+_TMP_DB  = '/tmp/yak.db'
+
+if _GCS_DB:
+    if os.path.exists(_GCS_DB):
+        try:
+            shutil.copy2(_GCS_DB, _TMP_DB)
+            print(f'[db] {_GCS_DB} → {_TMP_DB} ({os.path.getsize(_TMP_DB):,} bytes)')
+        except Exception as e:
+            print(f'[db] copy failed ({e}), falling back to {_GCS_DB}')
+            _GCS_DB = None
+    else:
+        print(f'[db] {_GCS_DB} 없음, 새로 생성: {_TMP_DB}')
+
+_db_url = f'sqlite:////{_TMP_DB}' if _GCS_DB else _db_url_env
 ENGINE = create_engine(_db_url, echo=False, connect_args={'check_same_thread': False})
 
 @event.listens_for(ENGINE, 'connect')
 def _set_sqlite_pragmas(conn, _):
     cur = conn.cursor()
-    cur.execute('PRAGMA journal_mode=DELETE')  # WAL은 GCS FUSE에서 POSIX 락 미지원으로 stale read 발생
+    cur.execute('PRAGMA journal_mode=DELETE')
     cur.execute('PRAGMA synchronous=NORMAL')
     cur.execute('PRAGMA busy_timeout=5000')
     cur.close()
