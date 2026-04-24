@@ -2,7 +2,8 @@ import { useState, useRef, useEffect } from 'react'
 import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, CalendarDays, ClipboardList, PackagePlus,
-  History, Settings, Lock, LockOpen, Eye, X, ShieldCheck, BarChart2
+  History, Settings, Lock, LockOpen, Eye, X, ShieldCheck, BarChart2,
+  Boxes, PackageCheck,
 } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import StockCalendar from './pages/StockCalendar'
@@ -11,24 +12,28 @@ import InventoryManage from './pages/InventoryManage'
 import HistoryPage from './pages/History'
 import SettingsPage from './pages/Settings'
 import Analytics from './pages/Analytics'
+import StockStatus from './pages/StockStatus'
+import InboundStatus from './pages/InboundStatus'
 import { AdminProvider, useAdmin } from './context/AdminContext'
 
 // ─── 네비 정의 ────────────────────────────────────────────
 const VIEWER_NAV = [
-  { to: '/',          icon: LayoutDashboard, label: '대시보드' },
+  { to: '/',          icon: LayoutDashboard, label: '대시보드'  },
   { to: '/calendar',  icon: CalendarDays,    label: '출고 현황' },
+  { to: '/stock',     icon: Boxes,           label: '현재고'    },
+  { to: '/inbound',  icon: PackageCheck,    label: '입고 현황' },
   { to: '/analytics', icon: BarChart2,       label: '판매 분석' },
 ]
 const ADMIN_NAV = [
-  { to: '/history',  icon: History,         label: '내역 관리' },
-  { to: '/order',    icon: ClipboardList,   label: '발주 입력' },
-  { to: '/inventory',icon: PackagePlus,     label: '입고 관리' },
-  { to: '/settings', icon: Settings,        label: '상품목록' },
+  { to: '/history',   icon: History,       label: '내역 관리' },
+  { to: '/order',     icon: ClipboardList, label: '발주 입력' },
+  { to: '/inventory', icon: PackagePlus,   label: '입고 관리' },
+  { to: '/settings',  icon: Settings,      label: '상품목록'  },
 ]
 
 // ─── 비밀번호 모달 (사이드바 관리자 전환용) ──────────────
 function PasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess: () => void }) {
-  const [pw, setPw]     = useState('')
+  const [pw, setPw]       = useState('')
   const [error, setError] = useState(false)
   const { loginAdmin }    = useAdmin()
   const inputRef          = useRef<HTMLInputElement>(null)
@@ -56,6 +61,7 @@ function PasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
           <input
             ref={inputRef} type="password" value={pw}
             onChange={e => setPw(e.target.value)} placeholder="••••"
+            autoComplete="current-password"
             className={`w-full border rounded-lg px-3 py-2.5 text-sm text-center tracking-widest
               focus:outline-none focus:ring-2 transition-all
               ${error ? 'border-red-300 bg-red-50 focus:ring-red-300' : 'border-slate-200 focus:ring-blue-400'}`}
@@ -107,7 +113,7 @@ function Layout() {
           </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4">
+        <nav className="flex-1 px-3 py-4 overflow-y-auto">
           <div className="space-y-1">
             {VIEWER_NAV.map(({ to, icon: Icon, label }) => (
               <NavLink key={to} to={to} end={to === '/'}
@@ -148,13 +154,15 @@ function Layout() {
 
       <main className="flex-1 overflow-auto">
         <Routes>
-          <Route path="/"           element={<Dashboard />} />
-          <Route path="/calendar"   element={<StockCalendar />} />
-          <Route path="/analytics"  element={<Analytics />} />
-          <Route path="/history"   element={isAdmin ? <HistoryPage /> : <Unauthorized />} />
-          <Route path="/order"     element={isAdmin ? <OrderInput /> : <Unauthorized />} />
-          <Route path="/inventory" element={isAdmin ? <InventoryManage /> : <Unauthorized />} />
-          <Route path="/settings"  element={isAdmin ? <SettingsPage /> : <Unauthorized />} />
+          <Route path="/"          element={<Dashboard />} />
+          <Route path="/calendar"  element={<StockCalendar />} />
+          <Route path="/stock"     element={<StockStatus />} />
+          <Route path="/inbound"   element={<InboundStatus />} />
+          <Route path="/analytics" element={<Analytics />} />
+          <Route path="/history"   element={isAdmin ? <HistoryPage />       : <Unauthorized />} />
+          <Route path="/order"     element={isAdmin ? <OrderInput />        : <Unauthorized />} />
+          <Route path="/inventory" element={isAdmin ? <InventoryManage />   : <Unauthorized />} />
+          <Route path="/settings"  element={isAdmin ? <SettingsPage />      : <Unauthorized />} />
         </Routes>
       </main>
     </div>
@@ -170,6 +178,57 @@ function Unauthorized() {
         <p className="text-sm text-slate-400 mt-1">사이드바에서 관리자 모드를 활성화하세요</p>
       </div>
     </div>
+  )
+}
+
+// ─── 비밀번호 폼 (EntryScreen 밖에 정의 — IME 포커스 버그 방지) ──
+// 주의: 이 컴포넌트를 EntryScreen 안에 넣으면 pw state 변경마다
+//       React가 새 컴포넌트로 인식해 언마운트/재마운트 → 포커스 소실 발생.
+interface PwFormProps {
+  onSubmit: (e: React.FormEvent) => void
+  color: 'blue' | 'amber'
+  pw: string
+  setPw: (v: string) => void
+  error: boolean
+  onBack: () => void
+  inputRef: React.RefObject<HTMLInputElement>
+}
+
+function PwForm({ onSubmit, color, pw, setPw, error, onBack, inputRef }: PwFormProps) {
+  return (
+    <form onSubmit={onSubmit} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-4">
+      <div className="flex items-center gap-2 mb-1">
+        <Lock size={16} className="text-slate-600" />
+        <p className="font-semibold text-slate-800 text-sm">비밀번호 입력</p>
+      </div>
+      <input
+        ref={inputRef}
+        type="password"
+        value={pw}
+        onChange={e => setPw(e.target.value)}
+        placeholder="••••••••"
+        autoComplete="current-password"
+        className={`w-full border rounded-xl px-4 py-3 text-center text-lg tracking-widest
+          focus:outline-none focus:ring-2 transition-all
+          ${error
+            ? 'border-red-300 bg-red-50 focus:ring-red-300'
+            : color === 'amber'
+            ? 'border-slate-200 focus:ring-amber-400'
+            : 'border-slate-200 focus:ring-blue-400'}`}
+      />
+      {error && <p className="text-xs text-red-500 text-center">비밀번호가 틀렸습니다</p>}
+      <div className="flex gap-2">
+        <button type="button" onClick={onBack}
+          className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors">
+          뒤로
+        </button>
+        <button type="submit"
+          className={`flex-1 py-2.5 text-white font-semibold rounded-xl transition-colors text-sm
+            ${color === 'amber' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
+          입장
+        </button>
+      </div>
+    </form>
   )
 }
 
@@ -197,35 +256,7 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
     else { setError(true); setPw(''); setTimeout(() => setError(false), 1500) }
   }
 
-  const PwForm = ({ onSubmit, color }: { onSubmit: (e: React.FormEvent) => void; color: 'blue' | 'amber' }) => (
-    <form onSubmit={onSubmit} className="bg-white border border-slate-200 rounded-2xl shadow-sm p-6 space-y-4">
-      <div className="flex items-center gap-2 mb-1">
-        <Lock size={16} className="text-slate-600" />
-        <p className="font-semibold text-slate-800 text-sm">비밀번호 입력</p>
-      </div>
-      <input
-        ref={inputRef} type="password" value={pw}
-        onChange={e => setPw(e.target.value)} placeholder="••••••••"
-        className={`w-full border rounded-xl px-4 py-3 text-center text-lg tracking-widest
-          focus:outline-none focus:ring-2 transition-all
-          ${error ? 'border-red-300 bg-red-50 focus:ring-red-300'
-            : color === 'amber' ? 'border-slate-200 focus:ring-amber-400'
-            : 'border-slate-200 focus:ring-blue-400'}`}
-      />
-      {error && <p className="text-xs text-red-500 text-center">비밀번호가 틀렸습니다</p>}
-      <div className="flex gap-2">
-        <button type="button" onClick={() => { setStep('select'); setPw('') }}
-          className="flex-1 py-2.5 border border-slate-200 rounded-xl text-sm text-slate-600 hover:bg-slate-50 transition-colors">
-          뒤로
-        </button>
-        <button type="submit"
-          className={`flex-1 py-2.5 text-white font-semibold rounded-xl transition-colors text-sm
-            ${color === 'amber' ? 'bg-amber-500 hover:bg-amber-600' : 'bg-blue-500 hover:bg-blue-600'}`}>
-          입장
-        </button>
-      </div>
-    </form>
-  )
+  const handleBack = () => { setStep('select'); setPw(''); setError(false) }
 
   return (
     <div className="min-h-screen bg-slate-50 flex items-center justify-center">
@@ -264,8 +295,20 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
           </div>
         )}
 
-        {step === 'viewer-pw' && <PwForm onSubmit={handleViewer} color="blue" />}
-        {step === 'admin-pw'  && <PwForm onSubmit={handleAdmin}  color="amber" />}
+        {step === 'viewer-pw' && (
+          <PwForm
+            onSubmit={handleViewer} color="blue"
+            pw={pw} setPw={setPw} error={error}
+            onBack={handleBack} inputRef={inputRef}
+          />
+        )}
+        {step === 'admin-pw' && (
+          <PwForm
+            onSubmit={handleAdmin} color="amber"
+            pw={pw} setPw={setPw} error={error}
+            onBack={handleBack} inputRef={inputRef}
+          />
+        )}
       </div>
     </div>
   )
