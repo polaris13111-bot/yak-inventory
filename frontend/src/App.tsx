@@ -191,7 +191,7 @@ interface PwFormProps {
   setPw: (v: string) => void
   error: boolean
   onBack: () => void
-  inputRef: React.RefObject<HTMLInputElement>
+  inputRef: React.RefObject<HTMLInputElement | null>
 }
 
 function PwForm({ onSubmit, color, pw, setPw, error, onBack, inputRef }: PwFormProps) {
