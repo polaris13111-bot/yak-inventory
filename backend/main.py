@@ -58,12 +58,12 @@ _seed_products()
 
 app = FastAPI(title='야크 재고관리 API')
 
-# ── GCS 동기화 미들웨어: POST/PUT/DELETE 후 백그라운드 sync ──
+# ── GCS 동기화 미들웨어: POST/PUT/DELETE 완료 후 동기 sync ──
 @app.middleware('http')
 async def _gcs_sync_middleware(request: Request, call_next):
     response = await call_next(request)
     if request.method in ('POST', 'PUT', 'DELETE'):
-        asyncio.create_task(asyncio.to_thread(_sync_db))
+        await asyncio.to_thread(_sync_db)
     return response
 
 app.add_middleware(
