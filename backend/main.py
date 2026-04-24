@@ -2,16 +2,18 @@ import asyncio
 import json
 import os
 import shutil
+from io import BytesIO
 from pathlib import Path
-from fastapi import FastAPI, HTTPException, Depends, Request
+from datetime import datetime, date as date_type
+from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
-from fastapi.responses import FileResponse
+from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
 from sqlalchemy import func
 from pydantic import BaseModel
 from typing import Optional
-from datetime import datetime
+from openpyxl import Workbook, load_workbook
 
 from models import ENGINE, init_db, Product, Order, InventoryItem, InventoryType, MappingRule
 
@@ -558,6 +560,110 @@ def seed_default_rules(db: Session = Depends(get_db)):
         db.add(rule)
     db.commit()
     return {'message': f'{len(rules_to_create)}개 기본 규칙 생성 완료', 'count': len(rules_to_create)}
+
+
+# ─── 백업 / 복원 ─────────────────────────────────────────────
+
+@app.get('/backup/export')
+def backup_export(db: Session = Depends(get_db)):
+    wb = Workbook()
+
+    ws_p = wb.active
+    ws_p.title = 'products'
+    ws_p.append(['id', 'name', 'color', 'size', 'model_code'])
+    for p in db.query(Product).order_by(Product.id).all():
+        ws_p.append([p.id, p.name, p.color, p.size, p.model_code or ''])
+
+    ws_o = wb.create_sheet('orders')
+    ws_o.append(['id', 'date', 'product_id', 'quantity', 'order_date',
+                 'storage', 'mall', 'orderer', 'recipient', 'phone', 'address', 'memo'])
+    for o in db.query(Order).order_by(Order.date, Order.id).all():
+        ws_o.append([o.id, o.date, o.product_id, o.quantity,
+                     o.order_date or '', o.storage or '', o.mall or '',
+                     o.orderer or '', o.recipient or '', o.phone or '',
+                     o.address or '', o.memo or ''])
+
+    ws_i = wb.create_sheet('inventory')
+    ws_i.append(['id', 'date', 'product_id', 'quantity', 'type', 'notes'])
+    for it in db.query(InventoryItem).order_by(InventoryItem.date, InventoryItem.id).all():
+        ws_i.append([it.id, it.date, it.product_id, it.quantity,
+                     it.type.value, it.notes or ''])
+
+    buf = BytesIO()
+    wb.save(buf)
+    buf.seek(0)
+    filename = f'yak_backup_{date_type.today().strftime("%Y%m%d")}.xlsx'
+    return StreamingResponse(
+        buf,
+        media_type='application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+        headers={'Content-Disposition': f'attachment; filename="{filename}"'},
+    )
+
+
+@app.post('/backup/import')
+async def backup_import(
+    file: UploadFile = File(...),
+    mode: str = Form('append'),
+    db: Session = Depends(get_db),
+):
+    content = await file.read()
+    try:
+        wb = load_workbook(BytesIO(content), data_only=True)
+    except Exception:
+        raise HTTPException(400, '올바른 xlsx 파일이 아닙니다')
+
+    if mode == 'reset':
+        db.query(Order).delete()
+        db.query(InventoryItem).delete()
+        db.commit()
+
+    stats = {'orders': 0, 'inventory': 0}
+
+    if 'orders' in wb.sheetnames:
+        rows = list(wb['orders'].iter_rows(values_only=True))
+        for row in rows[1:]:
+            if not row or row[0] is None:
+                continue
+            try:
+                row = tuple(row) + (None,) * 12
+                _, dt, pid, qty, odt, storage, mall, orderer, recipient, phone, address, memo = row[:12]
+                if not dt or not pid or qty is None:
+                    continue
+                db.add(Order(
+                    date=str(dt), product_id=int(pid), quantity=int(qty),
+                    order_date=str(odt or ''), storage=str(storage or '뉴페이스'),
+                    mall=str(mall or ''), orderer=str(orderer or ''),
+                    recipient=str(recipient or ''), phone=str(phone or ''),
+                    address=str(address or ''), memo=str(memo or ''),
+                ))
+                stats['orders'] += 1
+            except Exception:
+                continue
+
+    if 'inventory' in wb.sheetnames:
+        rows = list(wb['inventory'].iter_rows(values_only=True))
+        for row in rows[1:]:
+            if not row or row[0] is None:
+                continue
+            try:
+                row = tuple(row) + (None,) * 6
+                _, dt, pid, qty, type_val, notes = row[:6]
+                if not dt or not pid or qty is None:
+                    continue
+                try:
+                    inv_type = InventoryType(str(type_val or 'normal'))
+                except ValueError:
+                    inv_type = InventoryType.normal
+                db.add(InventoryItem(
+                    date=str(dt), product_id=int(pid), quantity=int(qty),
+                    type=inv_type, notes=str(notes or ''),
+                ))
+                stats['inventory'] += 1
+            except Exception:
+                continue
+
+    db.commit()
+    return stats
 
 
 # ─── React SPA 서빙 (프로덕션 빌드) ──────────────────────────

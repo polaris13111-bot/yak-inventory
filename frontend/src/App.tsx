@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, CalendarDays, ClipboardList, PackagePlus,
   History, Settings, Lock, LockOpen, Eye, X, ShieldCheck, BarChart2,
-  Boxes, PackageCheck,
+  Boxes, PackageCheck, Archive,
 } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import StockCalendar from './pages/StockCalendar'
@@ -14,6 +14,7 @@ import SettingsPage from './pages/Settings'
 import Analytics from './pages/Analytics'
 import StockStatus from './pages/StockStatus'
 import InboundStatus from './pages/InboundStatus'
+import BackupPage from './pages/Backup'
 import { AdminProvider, useAdmin } from './context/AdminContext'
 
 // ─── 네비 정의 ────────────────────────────────────────────
@@ -21,14 +22,17 @@ const VIEWER_NAV = [
   { to: '/',          icon: LayoutDashboard, label: '대시보드'  },
   { to: '/calendar',  icon: CalendarDays,    label: '출고 현황' },
   { to: '/stock',     icon: Boxes,           label: '현재고'    },
-  { to: '/inbound',  icon: PackageCheck,    label: '입고 현황' },
+  { to: '/inbound',   icon: PackageCheck,    label: '입고 현황' },
   { to: '/analytics', icon: BarChart2,       label: '판매 분석' },
 ]
-const ADMIN_NAV = [
-  { to: '/history',   icon: History,       label: '내역 관리' },
+const ADMIN_INPUT_NAV = [
   { to: '/order',     icon: ClipboardList, label: '발주 입력' },
   { to: '/inventory', icon: PackagePlus,   label: '입고 관리' },
-  { to: '/settings',  icon: Settings,      label: '상품목록'  },
+]
+const ADMIN_MANAGE_NAV = [
+  { to: '/history',  icon: History,  label: '내역 관리' },
+  { to: '/settings', icon: Settings, label: '상품목록'  },
+  { to: '/backup',   icon: Archive,  label: '백업·복원' },
 ]
 
 // ─── 비밀번호 모달 (사이드바 관리자 전환용) ──────────────
@@ -126,16 +130,35 @@ function Layout() {
           </div>
 
           {isAdmin ? (
-            <div className="mt-4 space-y-1">
-              <p className="px-3 mb-1 text-xs font-semibold text-amber-600 uppercase tracking-wide">관리자</p>
-              {ADMIN_NAV.map(({ to, icon: Icon, label }) => (
-                <NavLink key={to} to={to}
-                  className={({ isActive }) =>
-                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                     ${isActive ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-amber-50/60 hover:text-amber-700'}`}>
-                  <Icon size={18} />{label}
-                </NavLink>
-              ))}
+            <div className="mt-4 space-y-3">
+              {/* 입력 그룹 */}
+              <div>
+                <p className="px-3 mb-1 text-xs font-semibold text-amber-500 uppercase tracking-wide">입력</p>
+                <div className="space-y-0.5">
+                  {ADMIN_INPUT_NAV.map(({ to, icon: Icon, label }) => (
+                    <NavLink key={to} to={to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                         ${isActive ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-amber-50/60 hover:text-amber-700'}`}>
+                      <Icon size={18} />{label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
+              {/* 설정·관리 그룹 */}
+              <div>
+                <p className="px-3 mb-1 text-xs font-semibold text-amber-500 uppercase tracking-wide">설정·관리</p>
+                <div className="space-y-0.5">
+                  {ADMIN_MANAGE_NAV.map(({ to, icon: Icon, label }) => (
+                    <NavLink key={to} to={to}
+                      className={({ isActive }) =>
+                        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                         ${isActive ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-amber-50/60 hover:text-amber-700'}`}>
+                      <Icon size={18} />{label}
+                    </NavLink>
+                  ))}
+                </div>
+              </div>
             </div>
           ) : (
             <div className="mt-4 px-3 py-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">
@@ -159,10 +182,11 @@ function Layout() {
           <Route path="/stock"     element={<StockStatus />} />
           <Route path="/inbound"   element={<InboundStatus />} />
           <Route path="/analytics" element={<Analytics />} />
-          <Route path="/history"   element={isAdmin ? <HistoryPage />       : <Unauthorized />} />
           <Route path="/order"     element={isAdmin ? <OrderInput />        : <Unauthorized />} />
           <Route path="/inventory" element={isAdmin ? <InventoryManage />   : <Unauthorized />} />
+          <Route path="/history"   element={isAdmin ? <HistoryPage />       : <Unauthorized />} />
           <Route path="/settings"  element={isAdmin ? <SettingsPage />      : <Unauthorized />} />
+          <Route path="/backup"    element={isAdmin ? <BackupPage />        : <Unauthorized />} />
         </Routes>
       </main>
     </div>
