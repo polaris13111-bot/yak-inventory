@@ -1,7 +1,7 @@
 import { useState, useEffect, useMemo } from 'react'
 import { ChevronRight, Pencil, Trash2, Check, X, Filter, Package, ShoppingCart, Lock, Download } from 'lucide-react'
 import dayjs from 'dayjs'
-import { getOrders, updateOrder, deleteOrder, batchDeleteOrders, getInventory } from '../api'
+import { getOrders, updateOrder, deleteOrder, batchDeleteOrders, getInventory, updateInventory, deleteInventory, batchDeleteInventory } from '../api'
 import type { Order, InventoryItem } from '../types'
 import { useAdmin } from '../context/AdminContext'
 import { exportOrders, exportInventory } from '../utils/exportXlsx'
@@ -150,6 +150,113 @@ function OrderRow({
   )
 }
 
+// ─── 입고 인라인 편집 행 ──────────────────────────────────
+function InventoryRow({
+  item, selected, onToggle, onDelete, onUpdated, isAdmin,
+}: {
+  item: InventoryItem
+  selected: boolean
+  onToggle: () => void
+  onDelete: () => void
+  onUpdated: (updated: InventoryItem) => void
+  isAdmin: boolean
+}) {
+  const [editing, setEditing] = useState(false)
+  const [saving, setSaving]   = useState(false)
+  const [saveError, setSaveError] = useState(false)
+  const [form, setForm] = useState<Partial<InventoryItem>>({})
+
+  const startEdit = () => {
+    setForm({ date: item.date, quantity: item.quantity, type: item.type, notes: item.notes })
+    setEditing(true)
+  }
+
+  const handleSave = async () => {
+    setSaving(true); setSaveError(false)
+    try {
+      const updated = await updateInventory(item.id, {
+        date:       form.date       ?? item.date,
+        product_id: item.product_id,
+        quantity:   form.quantity   ?? item.quantity,
+        type:       form.type       ?? item.type,
+        notes:      form.notes      ?? item.notes,
+      })
+      onUpdated(updated); setEditing(false)
+    } catch { setSaveError(true) }
+    finally { setSaving(false) }
+  }
+
+  if (editing) {
+    return (
+      <tr className="bg-green-50/50">
+        <td className="px-3 py-2">
+          <input type="checkbox" checked={selected} onChange={onToggle}
+            className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-400" />
+        </td>
+        <td className="px-4 py-2">
+          <input value={form.date ?? ''} onChange={e => setForm(p => ({...p, date: e.target.value}))}
+            className="w-16 border border-green-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400" />
+        </td>
+        <td className="px-4 py-2 text-xs text-slate-600" colSpan={2}>
+          {item.product?.name} / {item.product?.color} / {item.product?.size}
+        </td>
+        <td className="px-4 py-2">
+          <input type="number" value={form.quantity ?? ''} onChange={e => setForm(p => ({...p, quantity: Number(e.target.value)}))}
+            className="w-14 border border-green-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400" />
+        </td>
+        <td className="px-4 py-2">
+          <select value={form.type ?? 'normal'} onChange={e => setForm(p => ({...p, type: e.target.value as 'normal' | 'return'}))}
+            className="border border-green-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400">
+            <option value="normal">정상</option>
+            <option value="return">반품</option>
+          </select>
+        </td>
+        <td className="px-4 py-2">
+          <input value={form.notes ?? ''} onChange={e => setForm(p => ({...p, notes: e.target.value}))}
+            className="w-32 border border-green-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400" />
+        </td>
+        <td className="px-4 py-2">
+          <div className="flex flex-col gap-1">
+            <div className="flex gap-1.5">
+              <button onClick={handleSave} disabled={saving} className="text-green-500 hover:text-green-700 disabled:opacity-40"><Check size={14} /></button>
+              <button onClick={() => setEditing(false)} disabled={saving} className="text-slate-400 hover:text-slate-600 disabled:opacity-40"><X size={14} /></button>
+            </div>
+            {saveError && <p className="text-[10px] text-red-500">저장 실패</p>}
+          </div>
+        </td>
+      </tr>
+    )
+  }
+
+  return (
+    <tr className={`hover:bg-slate-50/50 transition-colors group ${selected ? 'bg-green-50/40' : ''}`}>
+      <td className="px-3 py-2.5">
+        <input type="checkbox" checked={selected} onChange={onToggle}
+          className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-400 cursor-pointer" />
+      </td>
+      <td className="px-4 py-2.5 text-sm font-mono text-slate-700">{item.date}</td>
+      <td className="px-4 py-2.5 text-sm font-medium text-slate-700">{item.product?.name}</td>
+      <td className="px-4 py-2.5 text-xs text-slate-500">{item.product?.color} / {item.product?.size}</td>
+      <td className="px-4 py-2.5 text-sm font-bold text-green-700">+{item.quantity}</td>
+      <td className="px-4 py-2.5">
+        <span className={`text-xs px-2 py-0.5 rounded font-medium
+          ${item.type === 'normal' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
+          {item.type === 'normal' ? '정상' : '반품'}
+        </span>
+      </td>
+      <td className="px-4 py-2.5 text-xs text-slate-400">{item.notes}</td>
+      {isAdmin && (
+        <td className="px-4 py-2.5 w-16">
+          <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
+            <button onClick={startEdit} className="text-slate-400 hover:text-blue-500"><Pencil size={13} /></button>
+            <button onClick={onDelete} className="text-slate-400 hover:text-red-500"><Trash2 size={13} /></button>
+          </div>
+        </td>
+      )}
+    </tr>
+  )
+}
+
 // ─── 메인 ─────────────────────────────────────────────────
 export default function History() {
   const { isAdmin }           = useAdmin()
@@ -185,13 +292,25 @@ export default function History() {
     setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
   }
 
+  const handleDeleteInvItem = async (id: number) => {
+    if (!confirm('이 입고 내역을 삭제할까요?')) return
+    await deleteInventory(id)
+    setInv(prev => prev.filter(i => i.id !== id))
+    setSelected(prev => { const n = new Set(prev); n.delete(id); return n })
+  }
+
   const handleBulkDelete = async () => {
     if (selected.size === 0) return
     if (!confirm(`선택한 ${selected.size}건을 삭제할까요?`)) return
     setBulkDeleting(true)
     try {
-      await batchDeleteOrders(Array.from(selected))
-      setOrders(prev => prev.filter(o => !selected.has(o.id)))
+      if (tab === 'orders') {
+        await batchDeleteOrders(Array.from(selected))
+        setOrders(prev => prev.filter(o => !selected.has(o.id)))
+      } else {
+        await batchDeleteInventory(Array.from(selected))
+        setInv(prev => prev.filter(i => !selected.has(i.id)))
+      }
       setSelected(new Set())
     } finally {
       setBulkDeleting(false)
@@ -259,6 +378,17 @@ export default function History() {
       if (next.has(key)) next.delete(key); else next.add(key)
       return next
     })
+
+  const toggleInvGroupSelect = (rows: InventoryItem[]) => {
+    const ids = rows.map(r => r.id)
+    const allSelected = ids.every(id => selected.has(id))
+    setSelected(prev => {
+      const n = new Set(prev)
+      if (allSelected) ids.forEach(id => n.delete(id))
+      else ids.forEach(id => n.add(id))
+      return n
+    })
+  }
 
   // 그룹 내 전체선택
   const toggleGroupSelect = (rows: Order[]) => {
@@ -465,6 +595,9 @@ export default function History() {
           {Object.entries(groupedInv).map(([groupKey, rows]) => {
             const isOpen = openGroups.has(groupKey)
             const groupQty = rows.reduce((s, r) => s + r.quantity, 0)
+            const groupIds = rows.map(r => r.id)
+            const allGroupSelected = groupIds.length > 0 && groupIds.every(id => selected.has(id))
+            const someGroupSelected = groupIds.some(id => selected.has(id))
             return (
               <div key={groupKey} className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
                 <button
@@ -475,38 +608,46 @@ export default function History() {
                     <span className="font-semibold text-slate-700">{groupKey}</span>
                     <span className="text-xs text-slate-400">{rows.length}건</span>
                     <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">+{groupQty}개 입고</span>
+                    {someGroupSelected && (
+                      <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">
+                        {groupIds.filter(id => selected.has(id)).length}건 선택
+                      </span>
+                    )}
                   </div>
                 </button>
                 {isOpen && (
                   <div className="border-t border-slate-100 overflow-auto">
-                    <table className="w-full text-sm" style={{ minWidth: '600px' }}>
+                    <table className="w-full text-sm" style={{ minWidth: '620px' }}>
                       <thead>
                         <tr className="bg-slate-50/80 text-xs">
+                          {isAdmin && (
+                            <th className="px-3 py-2 w-8">
+                              <input type="checkbox" checked={allGroupSelected}
+                                ref={el => { if (el) el.indeterminate = someGroupSelected && !allGroupSelected }}
+                                onChange={() => toggleInvGroupSelect(rows)}
+                                className="w-3.5 h-3.5 rounded border-slate-300 text-blue-600 focus:ring-blue-400 cursor-pointer" />
+                            </th>
+                          )}
                           <th className="px-4 py-2 text-left font-medium text-slate-500 w-16">날짜</th>
                           <th className="px-4 py-2 text-left font-medium text-slate-500">제품명</th>
                           <th className="px-4 py-2 text-left font-medium text-slate-500">색상/사이즈</th>
                           <th className="px-4 py-2 text-left font-medium text-slate-500 w-12">수량</th>
                           <th className="px-4 py-2 text-left font-medium text-slate-500 w-16">유형</th>
                           <th className="px-4 py-2 text-left font-medium text-slate-500">메모</th>
+                          {isAdmin && <th className="px-4 py-2 w-16"></th>}
                         </tr>
                       </thead>
                       <tbody className="divide-y divide-slate-100">
                         {rows.map(item => (
-                          <tr key={item.id} className="hover:bg-slate-50/50 transition-colors">
-                            <td className="px-4 py-2.5 text-sm font-mono text-slate-700">{item.date}</td>
-                            <td className="px-4 py-2.5 text-sm font-medium text-slate-700">{item.product?.name}</td>
-                            <td className="px-4 py-2.5 text-xs text-slate-500">
-                              {item.product?.color} / {item.product?.size}
-                            </td>
-                            <td className="px-4 py-2.5 text-sm font-bold text-green-700">+{item.quantity}</td>
-                            <td className="px-4 py-2.5">
-                              <span className={`text-xs px-2 py-0.5 rounded font-medium
-                                ${item.type === 'normal' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-                                {item.type === 'normal' ? '정상' : '반품'}
-                              </span>
-                            </td>
-                            <td className="px-4 py-2.5 text-xs text-slate-400">{item.notes}</td>
-                          </tr>
+                          <InventoryRow
+                            key={item.id}
+                            item={item}
+                            selected={selected.has(item.id)}
+                            onToggle={() => toggleSelect(item.id)}
+                            onDelete={() => handleDeleteInvItem(item.id)}
+                            onUpdated={updated => setInv(prev => prev.map(i => i.id === updated.id ? updated : i))}
+                            isAdmin={isAdmin}
+                          />
                         ))}
                       </tbody>
                     </table>

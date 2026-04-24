@@ -1,23 +1,44 @@
 import { useState, useEffect, useMemo } from 'react'
-import { Search, AlertCircle, RefreshCw } from 'lucide-react'
+import { Search, AlertCircle, RefreshCw, SlidersHorizontal } from 'lucide-react'
+import dayjs from 'dayjs'
 import { getStockSummary } from '../api'
 import type { StockSummary } from '../types'
 import { getColorHex } from '../utils/colors'
 
 export default function StockStatus() {
-  const [stock, setStock]       = useState<StockSummary[]>([])
-  const [loading, setLoading]   = useState(true)
-  const [loadError, setLoadError] = useState(false)
-  const [search, setSearch]     = useState('')
-  const [lowOnly, setLowOnly]   = useState(false)
+  const [stock, setStock]           = useState<StockSummary[]>([])
+  const [monthStock, setMonthStock] = useState<StockSummary[]>([])
+  const [loading, setLoading]       = useState(true)
+  const [loadError, setLoadError]   = useState(false)
+  const [search, setSearch]         = useState('')
+  const [lowOnly, setLowOnly]       = useState(false)
+  const [showThreshold, setShowThreshold] = useState(false)
+  const [threshold, setThreshold]   = useState(() => {
+    const v = localStorage.getItem('yak-stock-threshold')
+    return v ? Number(v) : 3
+  })
+
+  const monthStr    = String(dayjs().month() + 1)
+  const daysElapsed = Math.max(dayjs().date(), 1)
+
+  const monthOutMap = useMemo(() => {
+    const m: Record<number, number> = {}
+    for (const s of monthStock) m[s.product.id] = s.total_out
+    return m
+  }, [monthStock])
 
   const load = () => {
     setLoading(true)
     setLoadError(false)
-    getStockSummary()
-      .then(setStock)
+    Promise.all([getStockSummary(), getStockSummary(monthStr)])
+      .then(([all, monthly]) => { setStock(all); setMonthStock(monthly) })
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false))
+  }
+
+  const saveThreshold = (v: number) => {
+    setThreshold(v)
+    localStorage.setItem('yak-stock-threshold', String(v))
   }
 
   useEffect(load, [])
@@ -32,13 +53,13 @@ export default function StockStatus() {
         s.product.size.toLowerCase().includes(q)
       )
     }
-    if (lowOnly) items = items.filter(s => s.low_stock || s.current_stock <= 0)
+    if (lowOnly) items = items.filter(s => s.current_stock <= threshold)
     return items
-  }, [stock, search, lowOnly])
+  }, [stock, search, lowOnly, threshold])
 
   const totalStock = stock.reduce((s, x) => s + x.current_stock, 0)
   const zeroCount  = stock.filter(s => s.current_stock <= 0).length
-  const lowCount   = stock.filter(s => s.low_stock && s.current_stock > 0).length
+  const lowCount   = stock.filter(s => s.current_stock > 0 && s.current_stock <= threshold).length
 
   return (
     <div className="p-6 space-y-5 overflow-auto h-full">
@@ -79,7 +100,7 @@ export default function StockStatus() {
           </div>
 
           {/* 필터 */}
-          <div className="flex gap-3 items-center">
+          <div className="flex gap-3 items-center flex-wrap">
             <div className="relative flex-1 max-w-xs">
               <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
               <input
@@ -97,6 +118,24 @@ export default function StockStatus() {
               <AlertCircle size={14} />
               부족·품절만
             </button>
+            <div className="relative">
+              <button onClick={() => setShowThreshold(v => !v)}
+                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border bg-white border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+                <SlidersHorizontal size={14} />
+                경고기준 {threshold}개
+              </button>
+              {showThreshold && (
+                <div className="absolute top-10 left-0 z-10 bg-white border border-slate-200 rounded-xl shadow-lg p-4 w-52">
+                  <p className="text-xs font-medium text-slate-600 mb-2">재고 경고 기준 (개)</p>
+                  <input type="number" min={1} max={50} value={threshold}
+                    onChange={e => saveThreshold(Number(e.target.value))}
+                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                  <p className="text-xs text-slate-400 mt-2">현재고가 이 값 이하이면 "부족"으로 표시</p>
+                  <button onClick={() => setShowThreshold(false)}
+                    className="mt-3 w-full py-1.5 bg-slate-800 text-white text-xs rounded-lg hover:bg-slate-900">확인</button>
+                </div>
+              )}
+            </div>
             <span className="text-xs text-slate-400">{filtered.length}개 표시 중</span>
           </div>
 
@@ -111,13 +150,18 @@ export default function StockStatus() {
                   <th className="px-4 py-3 text-right">총 입고</th>
                   <th className="px-4 py-3 text-right">총 출고</th>
                   <th className="px-4 py-3 text-right">현재고</th>
+                  <th className="px-4 py-3 text-right">일 평균</th>
+                  <th className="px-4 py-3 text-right">소진 예상</th>
                   <th className="px-4 py-3 text-center">상태</th>
                 </tr>
               </thead>
               <tbody className="divide-y divide-slate-100">
                 {filtered.map(s => {
-                  const isZero = s.current_stock <= 0
-                  const isLow  = !isZero && s.low_stock
+                  const isZero     = s.current_stock <= 0
+                  const isLow      = !isZero && s.current_stock <= threshold
+                  const monthlyOut = monthOutMap[s.product.id] ?? 0
+                  const velocity   = monthlyOut / daysElapsed          // 일 평균 출고
+                  const daysLeft   = velocity > 0 ? Math.ceil(s.current_stock / velocity) : null
                   return (
                     <tr key={s.product.id}
                       className={isZero ? 'bg-red-50/40' : isLow ? 'bg-amber-50/40' : 'hover:bg-slate-50/60'}>
@@ -136,6 +180,22 @@ export default function StockStatus() {
                         ${isZero ? 'text-red-600' : isLow ? 'text-amber-600' : 'text-slate-800'}`}>
                         {s.current_stock}
                       </td>
+                      <td className="px-4 py-2.5 text-right text-xs text-slate-400">
+                        {velocity > 0 ? `${velocity.toFixed(1)}/일` : '-'}
+                      </td>
+                      <td className="px-4 py-2.5 text-right text-xs">
+                        {isZero ? (
+                          <span className="text-red-500 font-medium">품절</span>
+                        ) : daysLeft === null ? (
+                          <span className="text-slate-300">-</span>
+                        ) : daysLeft <= 7 ? (
+                          <span className="text-red-500 font-semibold">D-{daysLeft}</span>
+                        ) : daysLeft <= 14 ? (
+                          <span className="text-amber-500 font-medium">D-{daysLeft}</span>
+                        ) : (
+                          <span className="text-slate-400">D-{daysLeft}</span>
+                        )}
+                      </td>
                       <td className="px-4 py-2.5 text-center">
                         {isZero
                           ? <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full font-medium">품절</span>
@@ -149,7 +209,7 @@ export default function StockStatus() {
                 })}
                 {filtered.length === 0 && (
                   <tr>
-                    <td colSpan={7} className="px-4 py-14 text-center text-slate-400 text-sm">
+                    <td colSpan={9} className="px-4 py-14 text-center text-slate-400 text-sm">
                       {search || lowOnly ? '검색 결과가 없습니다' : '재고 데이터가 없습니다'}
                     </td>
                   </tr>

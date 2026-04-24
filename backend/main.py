@@ -292,6 +292,16 @@ def batch_delete_orders(body: dict, db: Session = Depends(get_db)):
     db.commit()
     return {'deleted': result.rowcount}
 
+@app.post('/inventory/batch-delete')
+def batch_delete_inventory(body: dict, db: Session = Depends(get_db)):
+    from sqlalchemy import delete as sa_delete
+    ids: list[int] = body.get('ids', [])
+    if not ids:
+        return {'deleted': 0}
+    result = db.execute(sa_delete(InventoryItem).where(InventoryItem.id.in_(ids)))
+    db.commit()
+    return {'deleted': result.rowcount}
+
 @app.post('/orders/bulk')
 def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
     if len(data) > 500:

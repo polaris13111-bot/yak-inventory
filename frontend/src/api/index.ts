@@ -50,6 +50,9 @@ export const updateInventory = (id: number, data: Omit<InventoryItem, 'id' | 'cr
 export const deleteInventory = (id: number) =>
   api.delete(`/inventory/${id}`)
 
+export const batchDeleteInventory = (ids: number[]) =>
+  api.post('/inventory/batch-delete', { ids }).then(r => r.data)
+
 export const createOrdersBulk = (data: Omit<Order, 'id' | 'created_at' | 'product'>[]) =>
   api.post<{ ok: number; fail: { product_id: number; reason: string }[] }>('/orders/bulk', data).then(r => r.data)
 
