@@ -117,9 +117,9 @@ function ProductsTab() {
 
   const handleSave = async (data: ProductForm) => {
     if (modal === 'new') {
-      await createProduct(data)
+      await createProduct({ ...data, active: true })
     } else if (modal && typeof modal === 'object') {
-      await updateProduct(modal.id, data)
+      await updateProduct(modal.id, { ...data, active: modal.active })
     }
     setModal(null)
     load()
