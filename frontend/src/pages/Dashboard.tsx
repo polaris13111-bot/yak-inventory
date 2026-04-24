@@ -1,36 +1,45 @@
 import { useState, useEffect } from 'react'
-import { AlertTriangle, TrendingDown, Package, ShoppingCart } from 'lucide-react'
+import { AlertTriangle, TrendingDown, Package, ShoppingCart, PackageCheck } from 'lucide-react'
 import dayjs from 'dayjs'
-import { getStockSummary, getOrders } from '../api'
-import type { StockSummary, Order } from '../types'
+import { getStockSummary, getOrders, getInventory } from '../api'
+import type { StockSummary, Order, InventoryItem } from '../types'
 
 export default function Dashboard() {
-  const today = dayjs()
-  const monthStr = String(today.month() + 1)
-  const todayStr = today.format('M.DD')
+  const today        = dayjs()
+  const monthStr     = String(today.month() + 1)
+  const prevMonthStr = String(today.month() === 0 ? 12 : today.month())
+  const todayStr     = today.format('M.DD')
 
-  const [summaryAll, setSummaryAll]     = useState<StockSummary[]>([])   // 누적 재고 (부족 판단용)
-  const [summaryMonth, setSummaryMonth] = useState<StockSummary[]>([])   // 이달 집계 (총출고용)
-  const [todayOrders, setTodayOrders]   = useState<Order[]>([])
-  const [loading, setLoading]           = useState(true)
-  const [error, setError]               = useState(false)
+  const [summaryAll, setSummaryAll]         = useState<StockSummary[]>([])
+  const [summaryMonth, setSummaryMonth]     = useState<StockSummary[]>([])
+  const [summaryPrev, setSummaryPrev]       = useState<StockSummary[]>([])
+  const [todayOrders, setTodayOrders]       = useState<Order[]>([])
+  const [monthInventory, setMonthInventory] = useState<InventoryItem[]>([])
+  const [loading, setLoading]               = useState(true)
+  const [error, setError]                   = useState(false)
 
   useEffect(() => {
     Promise.all([
-      getStockSummary(),           // 전체 누적 — 실제 현재고 계산
-      getStockSummary(monthStr),   // 이달 — 월 출고량 계산
+      getStockSummary(),
+      getStockSummary(monthStr),
+      getStockSummary(prevMonthStr),
       getOrders({ date: todayStr }),
-    ]).then(([all, monthly, orders]) => {
+      getInventory({ month: monthStr }),
+    ]).then(([all, monthly, prev, orders, inv]) => {
       setSummaryAll(all)
       setSummaryMonth(monthly)
+      setSummaryPrev(prev)
       setTodayOrders(orders)
+      setMonthInventory(inv)
     }).catch(() => setError(true))
     .finally(() => setLoading(false))
   }, [])
 
   const lowStock  = summaryAll.filter(s => s.current_stock < 1)
-  const warnStock = summaryAll.filter(s => s.current_stock >= 1 && s.current_stock <= 3)
   const totalOut  = summaryMonth.reduce((acc, s) => acc + s.total_out, 0)
+  const prevOut   = summaryPrev.reduce((acc, s) => acc + s.total_out, 0)
+  const monthIn   = monthInventory.reduce((acc, i) => acc + i.quantity, 0)
+  const pctChange = prevOut > 0 ? ((totalOut - prevOut) / prevOut * 100) : null
 
   return (
     <div className="p-6 space-y-6">
@@ -47,24 +56,51 @@ export default function Dashboard() {
 
       {/* 요약 카드 4개 */}
       <div className="grid grid-cols-4 gap-4">
-        {[
-          { label: '오늘 출고', value: `${todayOrders.length}건`, icon: ShoppingCart, color: 'bg-blue-50 text-blue-600' },
-          { label: '이달 총 출고', value: `${totalOut}개`, icon: Package, color: 'bg-green-50 text-green-600' },
-          { label: '재고 부족', value: `${lowStock.length}개`, icon: TrendingDown, color: 'bg-red-50 text-red-600' },
-          { label: '재고 경고', value: `${warnStock.length}개`, icon: AlertTriangle, color: 'bg-amber-50 text-amber-600' },
-        ].map(({ label, value, icon: Icon, color }) => (
-          <div key={label} className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
-            <div className="flex items-center justify-between">
-              <div>
-                <p className="text-xs text-slate-400">{label}</p>
-                <p className="text-2xl font-bold text-slate-800 mt-1">{loading ? '...' : value}</p>
-              </div>
-              <div className={`p-3 rounded-lg ${color}`}>
-                <Icon size={20} />
-              </div>
+        {/* 오늘 출고 */}
+        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-400">오늘 출고</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">{loading ? '...' : `${todayOrders.length}건`}</p>
             </div>
+            <div className="p-3 rounded-lg bg-blue-50 text-blue-600"><ShoppingCart size={20} /></div>
           </div>
-        ))}
+        </div>
+        {/* 이달 총 출고 + 전달 대비 */}
+        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-400">이달 총 출고</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">{loading ? '...' : `${totalOut}개`}</p>
+              {!loading && pctChange !== null && (
+                <p className={`text-xs mt-0.5 font-medium ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  전달 대비 {pctChange >= 0 ? '+' : ''}{pctChange.toFixed(0)}%
+                </p>
+              )}
+            </div>
+            <div className="p-3 rounded-lg bg-green-50 text-green-600"><Package size={20} /></div>
+          </div>
+        </div>
+        {/* 재고 부족 */}
+        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-400">재고 부족</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">{loading ? '...' : `${lowStock.length}개`}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-red-50 text-red-600"><TrendingDown size={20} /></div>
+          </div>
+        </div>
+        {/* 이달 입고 */}
+        <div className="bg-white rounded-xl p-4 border border-slate-100 shadow-sm">
+          <div className="flex items-center justify-between">
+            <div>
+              <p className="text-xs text-slate-400">이달 입고</p>
+              <p className="text-2xl font-bold text-slate-800 mt-1">{loading ? '...' : `${monthIn}개`}</p>
+            </div>
+            <div className="p-3 rounded-lg bg-purple-50 text-purple-600"><PackageCheck size={20} /></div>
+          </div>
+        </div>
       </div>
 
       <div className="grid grid-cols-2 gap-6">

@@ -18,6 +18,9 @@ export const updateProduct = (id: number, data: Omit<Product, 'id'>) =>
 export const deleteProduct = (id: number) =>
   api.delete(`/products/${id}`)
 
+export const toggleProductActive = (id: number) =>
+  api.patch<Product>(`/products/${id}/toggle-active`).then(r => r.data)
+
 // 발주
 export const getOrders = (params?: { month?: string; date?: string }) =>
   api.get<Order[]>('/orders', { params }).then(r => r.data)

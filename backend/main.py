@@ -10,7 +10,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy import func
+from sqlalchemy import func, text
 from pydantic import BaseModel
 from typing import Optional
 from openpyxl import Workbook, load_workbook
@@ -18,6 +18,12 @@ from openpyxl import Workbook, load_workbook
 from models import ENGINE, init_db, Product, Order, InventoryItem, InventoryType, MappingRule
 
 init_db()
+with ENGINE.connect() as _conn:
+    try:
+        _conn.execute(text('ALTER TABLE products ADD COLUMN active INTEGER DEFAULT 1'))
+        _conn.commit()
+    except Exception:
+        pass  # column already exists
 SessionLocal = sessionmaker(bind=ENGINE)
 
 # ── GCS 동기화: 쓰기 후 /tmp/yak.db → /data/yak.db 복사 ──
@@ -64,7 +70,7 @@ app = FastAPI(title='야크 재고관리 API')
 @app.middleware('http')
 async def _gcs_sync_middleware(request: Request, call_next):
     response = await call_next(request)
-    if request.method in ('POST', 'PUT', 'DELETE'):
+    if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
         await asyncio.to_thread(_sync_db)
     return response
 
@@ -98,6 +104,7 @@ class ProductOut(BaseModel):
     color: str
     size: str
     model_code: str
+    active: bool = True
     model_config = {'from_attributes': True}
 
 class OrderIn(BaseModel):
@@ -230,6 +237,17 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
     db.delete(p)
     db.commit()
     return {'ok': True}
+
+
+@app.patch('/products/{product_id}/toggle-active', response_model=ProductOut)
+def toggle_product_active(product_id: int, db: Session = Depends(get_db)):
+    p = db.get(Product, product_id)
+    if not p:
+        raise HTTPException(404, '제품을 찾을 수 없습니다')
+    p.active = not (p.active if p.active is not None else True)
+    db.commit()
+    db.refresh(p)
+    return p
 
 
 # ─── 발주 ────────────────────────────────────────────────

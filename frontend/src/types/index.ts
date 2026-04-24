@@ -4,6 +4,7 @@ export interface Product {
   color: string
   size: string
   model_code: string
+  active: boolean
 }
 
 export interface Order {

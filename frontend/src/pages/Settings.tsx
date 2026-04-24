@@ -1,6 +1,6 @@
 import { useState, useEffect } from 'react'
-import { Settings2, Package, Plus, Trash2, Pencil, Check, X } from 'lucide-react'
-import { getProducts, createProduct, updateProduct, deleteProduct } from '../api'
+import { Settings2, Package, Plus, Trash2, Pencil, Check, X, Eye, EyeOff } from 'lucide-react'
+import { getProducts, createProduct, updateProduct, deleteProduct, toggleProductActive } from '../api'
 import type { Product } from '../types'
 
 // ─── 상품 추가/편집 모달 ──────────────────────────────────
@@ -99,6 +99,7 @@ function ProductsTab() {
   const [search, setSearch]     = useState('')
   const [modal, setModal]       = useState<'new' | Product | null>(null)
   const [deleting, setDeleting] = useState<number | null>(null)
+  const [toggling, setToggling] = useState<number | null>(null)
 
   const load = () => getProducts().then(setProducts)
   useEffect(() => { load() }, [])
@@ -122,6 +123,17 @@ function ProductsTab() {
     }
     setModal(null)
     load()
+  }
+
+  const handleToggleActive = async (p: Product) => {
+    setToggling(p.id)
+    try {
+      await toggleProductActive(p.id)
+      load()
+    } catch {
+      alert('상태 변경에 실패했습니다.')
+    }
+    setToggling(null)
   }
 
   const handleDelete = async (p: Product) => {
@@ -196,7 +208,9 @@ function ProductsTab() {
                 <div className="divide-y divide-slate-50">
                   {items.map(p => (
                     <div key={p.id}
-                      className="flex items-center justify-between px-4 py-2.5 hover:bg-slate-50/60 transition-colors group">
+                      className={`flex items-center justify-between px-4 py-2.5 transition-colors group ${
+                        p.active ? 'hover:bg-slate-50/60' : 'bg-slate-50/60 opacity-55 hover:opacity-80'
+                      }`}>
                       <div className="flex items-center gap-3">
                         <span className="text-xs text-slate-300 w-8 text-right font-mono">{p.id}</span>
                         <div className="flex items-center gap-2">
@@ -209,10 +223,24 @@ function ProductsTab() {
                               {p.model_code}
                             </span>
                           )}
+                          {!p.active && (
+                            <span className="text-xs px-1.5 py-0.5 bg-slate-200 text-slate-500 rounded font-medium">비활성</span>
+                          )}
                         </div>
                       </div>
-                      {/* 액션 버튼 — hover 시 표시 */}
-                      <div className="flex items-center gap-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                      {/* 액션 버튼 — 비활성 항목은 항상 표시, 활성 항목은 hover 시 표시 */}
+                      <div className={`flex items-center gap-1 transition-opacity ${p.active ? 'opacity-0 group-hover:opacity-100' : 'opacity-100'}`}>
+                        <button
+                          onClick={() => handleToggleActive(p)}
+                          disabled={toggling === p.id}
+                          title={p.active ? '비활성화' : '활성화'}
+                          className={`p-1.5 rounded-lg transition-colors disabled:opacity-40 ${
+                            p.active
+                              ? 'text-slate-400 hover:text-amber-500 hover:bg-amber-50'
+                              : 'text-amber-500 hover:text-emerald-500 hover:bg-emerald-50'
+                          }`}>
+                          {p.active ? <Eye size={14} /> : <EyeOff size={14} />}
+                        </button>
                         <button
                           onClick={() => setModal(p)}
                           className="p-1.5 text-slate-400 hover:text-blue-500 hover:bg-blue-50 rounded-lg transition-colors">

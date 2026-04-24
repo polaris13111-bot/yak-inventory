@@ -1,9 +1,9 @@
-import { useState, useEffect, useRef, Fragment } from 'react'
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
 import { CheckCircle, ChevronDown, Upload, ClipboardPaste, Trash2, AlertCircle, HelpCircle } from 'lucide-react'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
-import { getProducts, createOrder, createOrdersBulk } from '../api'
-import type { Product } from '../types'
+import { getProducts, createOrder, createOrdersBulk, getOrders } from '../api'
+import type { Product, Order } from '../types'
 import { autoMatch, findCandidates, scoreLabel, matchTypeBadge } from '../utils/matcher'
 import type { MatchResult } from '../utils/matcher'
 import ProductCascade from '../components/ProductCascade'
@@ -81,16 +81,17 @@ function SingleForm({ products }: { products: Product[] }) {
   const set = (key: keyof SingleFormData, val: string | number) =>
     setForm(prev => ({ ...prev, [key]: val }))
 
-  const names  = [...new Set(products.map(p => p.name))]
-  const colors = selName ? [...new Set(products.filter(p => p.name === selName).map(p => p.color))] : []
+  const activeProducts = products.filter(p => p.active !== false)
+  const names  = [...new Set(activeProducts.map(p => p.name))]
+  const colors = selName ? [...new Set(activeProducts.filter(p => p.name === selName).map(p => p.color))] : []
   const sizes  = (selName && selColor)
-    ? products.filter(p => p.name === selName && p.color === selColor).map(p => p.size) : []
+    ? activeProducts.filter(p => p.name === selName && p.color === selColor).map(p => p.size) : []
 
   const handleNameChange  = (v: string) => { setSelName(v); setSelColor(''); setSelSize(''); set('product_id', '') }
   const handleColorChange = (v: string) => { setSelColor(v); setSelSize(''); set('product_id', '') }
   const handleSizeChange  = (v: string) => {
     setSelSize(v)
-    const found = products.find(p => p.name === selName && p.color === selColor && p.size === v)
+    const found = activeProducts.find(p => p.name === selName && p.color === selColor && p.size === v)
     set('product_id', found?.id ?? '')
   }
 
@@ -186,19 +187,32 @@ function BulkForm({ products }: { products: Product[] }) {
   const [rows, setRows]         = useState<BulkRow[]>([EMPTY_ROW()])
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult]     = useState<{ ok: number; fail: number; failRows?: number[]; failItems?: BulkRow[] } | null>(null)
+  const [existingOrders, setExistingOrders] = useState<Order[]>([])
   const fileRef = useRef<HTMLInputElement>(null)
+
+  useEffect(() => {
+    getOrders({ date: dayjs().format('M.DD') }).then(setExistingOrders).catch(() => {})
+  }, [])
+
+  const existingSet = useMemo(() => {
+    const s = new Set<string>()
+    for (const o of existingOrders) s.add(`${o.product_id}:${o.date}`)
+    return s
+  }, [existingOrders])
+
+  const activeProducts = products.filter(p => p.active !== false)
 
   // 제품 매칭: autoMatch → 실패 시 findCandidates
   const matchProduct = (r: BulkRow): Pick<BulkRow, '_resolved' | '_matchType' | '_candidates'> => {
     const text = [r.productName, r.color, r.size].filter(Boolean).join(' ')
     if (!text.trim()) return { _resolved: undefined, _matchType: undefined, _candidates: undefined }
 
-    const auto = autoMatch(text, products)
+    const auto = autoMatch(text, activeProducts)
     if (auto) {
       return { _resolved: auto.product, _matchType: auto.matchType, _candidates: undefined }
     }
     // autoMatch 실패 → fuzzy 후보
-    const candidates = findCandidates(text, products, 5, 25)
+    const candidates = findCandidates(text, activeProducts, 5, 25)
     // fuzzy 100점이면 자동 매칭
     if (candidates.length > 0 && candidates[0].score >= 100) {
       return { _resolved: candidates[0].product, _matchType: 'fuzzy', _candidates: undefined }
@@ -342,7 +356,7 @@ function BulkForm({ products }: { products: Product[] }) {
       const next = [...prev]
       const r = next[i]
       const text = [r.productName, r.color, r.size].filter(Boolean).join(' ')
-      const candidates = text.trim() ? findCandidates(text, products, 5, 25) : []
+      const candidates = text.trim() ? findCandidates(text, activeProducts, 5, 25) : []
       next[i] = { ...next[i], _resolved: undefined, _matchType: undefined, _candidates: candidates, _showSearch: false }
       return next
     })
@@ -408,10 +422,11 @@ function BulkForm({ products }: { products: Product[] }) {
     if (failItems.length === 0) setTimeout(() => { setRows([EMPTY_ROW()]); setResult(null) }, 2500)
   }
 
-  const validCount      = rows.filter(r => r._resolved).length
-  const errorCount      = rows.filter(r => r._error).length
-  const candidateCount  = rows.filter(r => !r._resolved && !r._error && r._candidates !== undefined).length
-  const hasAnyData      = rows.some(r => r.productName || r.date !== dayjs().format('M.DD'))
+  const validCount     = rows.filter(r => r._resolved).length
+  const errorCount     = rows.filter(r => r._error).length
+  const candidateCount = rows.filter(r => !r._resolved && !r._error && r._candidates !== undefined).length
+  const dupCount       = rows.filter(r => r._resolved && existingSet.has(`${r._resolved.id}:${r.date}`)).length
+  const hasAnyData     = rows.some(r => r.productName || r.date !== dayjs().format('M.DD'))
 
   return (
     <div className="space-y-4">
@@ -488,6 +503,7 @@ function BulkForm({ products }: { products: Product[] }) {
             {validCount > 0      && <span className="text-xs px-2 py-0.5 bg-green-100 text-green-700 rounded-full">{validCount}개 등록 가능</span>}
             {candidateCount > 0  && <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">{candidateCount}개 수동 매칭 필요</span>}
             {errorCount > 0      && <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">{errorCount}개 오류</span>}
+            {dupCount > 0        && <span className="text-xs px-2 py-0.5 bg-orange-100 text-orange-700 rounded-full">⚠ {dupCount}개 중복 주의</span>}
           </div>
           <button onClick={addRow} className="text-xs px-3 py-1.5 bg-slate-100 hover:bg-slate-200 rounded-lg text-slate-600 transition-colors">
             + 행 추가
@@ -509,16 +525,20 @@ function BulkForm({ products }: { products: Product[] }) {
               {rows.map((row, i) => {
                 const hasCandidates = !row._resolved && !row._error && row._candidates !== undefined
                 const isAmber = hasCandidates
+                const isDup   = !!(row._resolved && existingSet.has(`${row._resolved.id}:${row.date}`))
                 return (
                   <Fragment key={i}>
                     <tr className={
                       row._error    ? 'bg-red-50' :
+                      isDup         ? 'bg-orange-50/60' :
                       row._resolved ? 'bg-green-50/40' :
                       isAmber       ? 'bg-amber-50/40' : 'bg-white'
                     }>
                       <td className="px-2 py-1.5 text-slate-400 text-center">
                         {row._resolved
-                          ? <span className="text-green-500">✓</span>
+                          ? isDup
+                            ? <span title="오늘 이미 등록된 발주 있음">⚠</span>
+                            : <span className="text-green-500">✓</span>
                           : row._error
                           ? <AlertCircle size={13} className="text-red-400 mx-auto" />
                           : isAmber
@@ -631,7 +651,7 @@ function BulkForm({ products }: { products: Product[] }) {
                             {row._showSearch && (
                               <div className="mt-2">
                                 <ProductCascade
-                                  products={products}
+                                  products={activeProducts}
                                   onSelect={p => selectCandidate(i, { product: p, score: 100, matchType: 'manual' })}
                                 />
                               </div>

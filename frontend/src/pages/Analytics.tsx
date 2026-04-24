@@ -22,18 +22,21 @@ export default function Analytics() {
   const [year]                          = useState(dayjs().year())
   const [products, setProducts]         = useState<Product[]>([])
   const [outbound, setOutbound]         = useState<DailyOutbound[]>([])
+  const [prevOutbound, setPrevOutbound] = useState<DailyOutbound[]>([])
   const [loading, setLoading]           = useState(true)
   const [loadError, setLoadError]       = useState(false)
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [drillMode, setDrillMode]       = useState<'color' | 'size'>('color')
 
-  const monthStr = `${month}`
+  const monthStr    = `${month}`
+  const prevMonth   = month === 1 ? 12 : month - 1
+  const prevMonthStr = `${prevMonth}`
 
   useEffect(() => {
     setLoading(true)
     setLoadError(false)
-    Promise.all([getProducts(), getDailyOutbound(monthStr)])
-      .then(([p, d]) => { setProducts(p); setOutbound(d) })
+    Promise.all([getProducts(), getDailyOutbound(monthStr), getDailyOutbound(prevMonthStr)])
+      .then(([p, d, prev]) => { setProducts(p); setOutbound(d); setPrevOutbound(prev) })
       .catch(() => setLoadError(true))
       .finally(() => setLoading(false))
   }, [monthStr])
@@ -85,8 +88,12 @@ export default function Analytics() {
       .sort((a, b) => b.value - a.value)
   }, [selectedName, drillMode, outbound, products, productMap])
 
-  const totalOutbound = barData.reduce((s, d) => s + d.total, 0)
-  const donutTotal    = donutData.reduce((s, d) => s + d.value, 0)
+  const totalOutbound     = barData.reduce((s, d) => s + d.total, 0)
+  const prevTotalOutbound = prevOutbound.reduce((s, r) => s + r.quantity, 0)
+  const pctChange         = prevTotalOutbound > 0
+    ? ((totalOutbound - prevTotalOutbound) / prevTotalOutbound * 100)
+    : null
+  const donutTotal = donutData.reduce((s, d) => s + d.value, 0)
 
   // 커스텀 툴팁
   const BarTip = ({ active, payload }: { active?: boolean; payload?: { payload: { name: string; total: number } }[] }) => {
@@ -163,8 +170,16 @@ export default function Analytics() {
         <>
           {/* 요약 카드 */}
           <div className="grid grid-cols-3 gap-4">
+            <div className="bg-white rounded-xl border border-slate-100 shadow-sm px-5 py-4">
+              <p className="text-xs text-slate-400 mb-1">총 출고</p>
+              <p className="text-lg font-bold text-blue-600">{totalOutbound}개</p>
+              {pctChange !== null && (
+                <p className={`text-xs mt-0.5 font-medium ${pctChange >= 0 ? 'text-emerald-500' : 'text-red-500'}`}>
+                  전달 대비 {pctChange >= 0 ? '+' : ''}{pctChange.toFixed(0)}% ({prevTotalOutbound}개)
+                </p>
+              )}
+            </div>
             {[
-              { label: '총 출고', value: `${totalOutbound}개`, color: 'text-blue-600' },
               { label: '출고 품목수', value: `${barData.length}종`, color: 'text-emerald-600' },
               { label: '1위 제품', value: barData[0]?.name ?? '-', color: 'text-amber-600' },
             ].map(({ label, value, color }) => (
