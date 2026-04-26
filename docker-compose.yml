@@ -1,0 +1,15 @@
+services:
+  app:
+    build:
+      context: .
+      args:
+        VITE_APP_NAME: "뉴페이스 창고 관리"
+        VITE_APP_SUB: "뉴페이스"
+        VITE_SKIP_AUTH: "true"
+    ports:
+      - "8000:8080"
+    volumes:
+      - ./data:/data
+    environment:
+      - DATABASE_URL=sqlite:////data/yak.db
+    restart: unless-stopped

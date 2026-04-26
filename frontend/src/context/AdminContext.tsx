@@ -21,8 +21,10 @@ const AdminContext = createContext<AdminContextType>({
   logout: () => {},
 })
 
+const SKIP_AUTH = import.meta.env.VITE_SKIP_AUTH === 'true'
+
 export function AdminProvider({ children }: { children: ReactNode }) {
-  const [isAdmin, setIsAdmin]   = useState(false)
+  const [isAdmin, setIsAdmin]   = useState(SKIP_AUTH)
   const [isViewer, setIsViewer] = useState(false)
 
   const loginAdmin = useCallback((pw: string) => {

@@ -97,8 +97,12 @@ function Layout() {
           <div className="flex items-center gap-2">
             <span className="text-2xl">🏔️</span>
             <div>
-              <p className="font-bold text-slate-800 text-sm leading-tight">야크 재고관리</p>
-              <p className="text-xs text-slate-400">블랙야크 위탁판매</p>
+              <p className="font-bold text-slate-800 text-sm leading-tight">
+                {import.meta.env.VITE_APP_NAME || '야크 재고관리'}
+              </p>
+              <p className="text-xs text-slate-400">
+                {import.meta.env.VITE_APP_SUB || '블랙야크 위탁판매'}
+              </p>
             </div>
           </div>
           <button
@@ -171,7 +175,9 @@ function Layout() {
         </nav>
 
         <div className="px-3 py-3 border-t border-slate-100">
-          <p className="text-xs text-slate-400 px-3 pt-1">뉴페이스 © 2026</p>
+          <p className="text-xs text-slate-400 px-3 pt-1">
+            {import.meta.env.VITE_APP_SUB || '뉴페이스'} © 2026
+          </p>
         </div>
       </aside>
 
@@ -287,8 +293,12 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="text-center space-y-1">
           <div className="text-5xl mb-3">🏔️</div>
-          <h1 className="text-2xl font-bold text-slate-800">야크 재고관리</h1>
-          <p className="text-sm text-slate-400">블랙야크 위탁판매 관리 시스템</p>
+          <h1 className="text-2xl font-bold text-slate-800">
+            {import.meta.env.VITE_APP_NAME || '야크 재고관리'}
+          </h1>
+          <p className="text-sm text-slate-400">
+            {import.meta.env.VITE_APP_SUB || '블랙야크 위탁판매'} 관리 시스템
+          </p>
         </div>
 
         {step === 'select' && (
@@ -338,8 +348,12 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
   )
 }
 
+const SKIP_AUTH = import.meta.env.VITE_SKIP_AUTH === 'true'
+
 function AppInner() {
-  const [entered, setEntered] = useState(() => sessionStorage.getItem('yak-entered') === '1')
+  const [entered, setEntered] = useState(() =>
+    SKIP_AUTH || sessionStorage.getItem('yak-entered') === '1'
+  )
 
   const handleEnter = () => {
     sessionStorage.setItem('yak-entered', '1')

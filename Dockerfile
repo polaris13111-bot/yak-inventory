@@ -4,8 +4,16 @@ WORKDIR /frontend
 COPY frontend/package*.json ./
 RUN npm install --legacy-peer-deps
 COPY frontend/ .
-# 프론트 + 백엔드가 같은 origin → 상대 경로 사용
-RUN VITE_API_URL="" npm run build
+
+ARG VITE_APP_NAME="야크 재고관리"
+ARG VITE_APP_SUB="블랙야크 위탁판매"
+ARG VITE_SKIP_AUTH="false"
+
+RUN VITE_API_URL="" \
+    VITE_APP_NAME="$VITE_APP_NAME" \
+    VITE_APP_SUB="$VITE_APP_SUB" \
+    VITE_SKIP_AUTH="$VITE_SKIP_AUTH" \
+    npm run build
 
 # ── 2단계: FastAPI 서버 ───────────────────────────────────
 FROM python:3.11-slim
