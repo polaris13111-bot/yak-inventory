@@ -202,13 +202,17 @@ function BulkForm({
 
     const firstCols = lines[0].split('\t').map(s => s.trim())
     const firstVal  = firstCols[0].toLowerCase().replace(/\s+/g, '')
-    const isHeader  = !firstVal.match(/^\d+\.\d+$/) && !firstVal.match(/^\d{4}-\d{2}-\d{2}$/) && isNaN(Number(firstVal))
+
+    const looksLikeDate = !!(firstVal.match(/^\d+\.\d+$/) || firstVal.match(/^\d{4}-\d{2}-\d{2}$/))
+    // 첫 셀이 HEADER_MAP에 매핑될 때만 헤더 행으로 인정 (제품명을 헤더로 오인하지 않도록)
+    const isKnownHeader = !!(HEADER_MAP[firstCols[0].trim()] ?? HEADER_MAP[firstVal])
+    const isHeader = !looksLikeDate && isKnownHeader
 
     let colMap: (keyof BulkInvRow | null)[]
     if (isHeader) {
       colMap = firstCols.map(h => HEADER_MAP[h.trim()] ?? HEADER_MAP[h.toLowerCase().replace(/\s+/g, '')] ?? null)
-    } else {
-      // 헤더 없을 때: 발주 스프레드시트 14열 기본 순서 (상품명=12, 수량=13)
+    } else if (looksLikeDate) {
+      // 발주 스프레드시트 14열 기본 순서 (발주일 먼저, 상품명=12, 수량=13)
       colMap = [
         'date',        // 0: 발주일자
         null,          // 1: 주문일자
@@ -225,6 +229,9 @@ function BulkForm({
         'productName', // 12: 상품명
         'quantity',    // 13: 수량
       ]
+    } else {
+      // 단순 형식: 상품명 · 수량 · 날짜 · 메모
+      colMap = ['productName', 'quantity', 'date', 'notes']
     }
 
     const dataLines = isHeader ? lines.slice(1) : lines
@@ -351,8 +358,8 @@ function BulkForm({
           <div>
             <p className="text-xs font-medium text-slate-600 mb-0.5">스프레드시트 데이터를 붙여넣으세요</p>
             <p className="text-xs text-slate-400">
-              열 순서: <span className="font-mono bg-slate-50 px-1 rounded">상품명 · 수량 · 날짜 · 메모</span>
-              &nbsp;또는 헤더 포함하여 복사해도 됩니다
+              열 순서: <span className="font-mono bg-slate-50 px-1 rounded">상품명(색상/사이즈/모델코드 포함) · 수량 · 날짜 · 메모</span>
+              &nbsp;— 헤더 포함 복사도 됩니다
             </p>
           </div>
           <textarea
