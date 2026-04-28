@@ -331,7 +331,7 @@ function BulkForm({
   products: Product[]
   onAdded: () => void
 }) {
-  const [subMode, setSubMode]     = useState<'paste' | 'file' | 'grid'>('paste')
+  const [subMode, setSubMode]     = useState<'paste' | 'file'>('paste')
   const [pasteText, setPasteText] = useState('')
   const [rows, setRows]           = useState<BulkInvRow[]>([EMPTY_INV_ROW()])
   const [submitting, setSubmitting] = useState(false)
@@ -359,18 +359,13 @@ function BulkForm({
       return { ...r, _error: undefined, ...matchProduct(r) }
     })
 
-  // 붙여넣기 파싱 — 발주 스프레드시트(14열) 또는 단순 상품명·수량 형식 모두 지원
+  // 붙여넣기 파싱 — 탭 구분(엑셀) / 다중 공백 구분(텍스트) / 헤더 자동 감지
   const HEADER_MAP: Record<string, keyof BulkInvRow> = {
-    // 발주 스프레드시트 헤더
     '발주일자': 'date', '발주일': 'date',
-    // 입고 전용 헤더
     '날짜': 'date', '입고일': 'date', '입고일자': 'date',
-    // 상품명
     '상품명': 'productName', '제품명': 'productName', '품명': 'productName',
     '상  품  명': 'productName',
-    // 수량
     '수량': 'quantity',
-    // 메모/유형
     '메모': 'notes', '비고': 'notes', '반품사유': 'notes', '배송메모': 'notes',
     '유형': 'type', '입고유형': 'type',
   }
@@ -379,11 +374,17 @@ function BulkForm({
     const lines = text.trim().split('\n').filter(l => l.trim())
     if (lines.length === 0) return []
 
-    const firstCols = lines[0].split('\t').map(s => s.trim())
+    // 탭 포함 여부로 구분자 자동 감지: 탭 없으면 2칸 이상 공백으로 분리
+    const hasTab = lines.some(l => l.includes('\t'))
+    const splitLine = (line: string): string[] =>
+      hasTab
+        ? line.split('\t').map(s => s.trim())
+        : line.split(/  +/).map(s => s.trim()).filter(s => s !== '')
+
+    const firstCols = splitLine(lines[0])
     const firstVal  = firstCols[0].toLowerCase().replace(/\s+/g, '')
 
     const looksLikeDate = !!(firstVal.match(/^\d+\.\d+$/) || firstVal.match(/^\d{4}-\d{2}-\d{2}$/))
-    // 첫 셀이 "#" 행번호이거나 빈 값일 수 있으므로 전체 행에서 헤더 키워드 검색
     const isKnownHeader = firstCols.some(h => {
       const k = h.toLowerCase().replace(/\s+/g, '')
       return !!(HEADER_MAP[h.trim()] ?? HEADER_MAP[k] ?? (h.trim() === '색상' || h.trim() === '사이즈'))
@@ -402,22 +403,11 @@ function BulkForm({
         return HEADER_MAP[h.trim()] ?? HEADER_MAP[k] ?? null
       })
     } else if (looksLikeDate) {
-      // 발주 스프레드시트 14열 기본 순서 (발주일 먼저, 상품명=12, 수량=13)
+      // 발주 스프레드시트 14열 기본 순서
       colMap = [
-        'date',        // 0: 발주일자
-        null,          // 1: 주문일자
-        null,          // 2: 제품보관
-        null,          // 3: 매출MALL
-        null,          // 4: 주문자명
-        null,          // 5: 송하인폰
-        null,          // 6: 수령인
-        null,          // 7: 수령인휴대폰
-        null,          // 8: 연락처
-        null,          // 9: 우편번호
-        null,          // 10: 주소
-        null,          // 11: 배송메모
-        'productName', // 12: 상품명
-        'quantity',    // 13: 수량
+        'date', null, null, null, null, null, null,
+        null, null, null, null, null,
+        'productName', 'quantity',
       ]
     } else {
       // 단순 형식: 상품명 · 수량 · 날짜 · 메모
@@ -426,7 +416,7 @@ function BulkForm({
 
     const dataLines = isHeader ? lines.slice(1) : lines
     return dataLines.map(line => {
-      const cells = line.split('\t').map(s => s.trim())
+      const cells = splitLine(line)
       const row: BulkInvRow = {
         date: dayjs().format('M.DD'),
         productName: '',
@@ -444,7 +434,6 @@ function BulkForm({
           }
         }
       })
-      // 발주 테이블에서 색상/사이즈가 분리된 경우 productName에 합산
       const colorPart = colorIdx >= 0 ? cells[colorIdx] ?? '' : ''
       const sizePart  = sizeIdx  >= 0 ? cells[sizeIdx]  ?? '' : ''
       if (colorPart || sizePart) {
@@ -547,11 +536,6 @@ function BulkForm({
             ${subMode === 'file' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
           <Upload size={15} />파일 업로드
         </button>
-        <button onClick={() => setSubMode('grid')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-            ${subMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
-          <LayoutGrid size={15} />그리드 입력
-        </button>
       </div>
 
       {subMode === 'paste' && (
@@ -599,10 +583,8 @@ function BulkForm({
         </div>
       )}
 
-      {subMode === 'grid' && <GridInvForm products={products} onAdded={onAdded} />}
-
       {/* 붙여넣기/파일 결과 테이블 */}
-      {subMode !== 'grid' && <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-slate-700">{rows.length}행</span>
@@ -754,9 +736,9 @@ function BulkForm({
             </tbody>
           </table>
         </div>
-      </div>}
+      </div>
 
-      {result && subMode !== 'grid' && (
+      {result && (
         <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm font-medium
           ${result.fail === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
           <CheckCircle size={16} />
@@ -764,20 +746,18 @@ function BulkForm({
         </div>
       )}
 
-      {subMode !== 'grid' && (
-        <button onClick={handleSubmit} disabled={validCount === 0 || submitting}
-          className="w-full py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700
-                     disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
-          {submitting ? '등록 중...' : `${validCount}건 입고 등록`}
-        </button>
-      )}
+      <button onClick={handleSubmit} disabled={validCount === 0 || submitting}
+        className="w-full py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700
+                   disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
+        {submitting ? '등록 중...' : `${validCount}건 입고 등록`}
+      </button>
     </div>
   )
 }
 
 // ─── 메인 컴포넌트 ────────────────────────────────────────
 export default function InventoryManage() {
-  const [inputMode, setInputMode] = useState<'single' | 'bulk'>('single')
+  const [inputMode, setInputMode] = useState<'single' | 'bulk' | 'grid'>('single')
   const [products, setProducts]   = useState<Product[]>([])
   const [history, setHistory]     = useState<InventoryItem[]>([])
   const [selectedIds, setSelectedIds] = useState<Set<number>>(new Set())
@@ -846,23 +826,27 @@ export default function InventoryManage() {
       </div>
 
       {/* 입력 모드 탭 */}
-      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit">
+      <div className="flex gap-1 p-1 bg-slate-100 rounded-xl w-fit flex-wrap">
         <button onClick={() => setInputMode('single')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${inputMode === 'single' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
           낱개 입력
         </button>
         <button onClick={() => setInputMode('bulk')}
-          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors
+          className={`px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${inputMode === 'bulk' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
-          대량 입력
+          텍스트 대량
+        </button>
+        <button onClick={() => setInputMode('grid')}
+          className={`flex items-center gap-1.5 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+            ${inputMode === 'grid' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+          <LayoutGrid size={14} />그리드 대량
         </button>
       </div>
 
-      {inputMode === 'single'
-        ? <SingleForm products={products} onAdded={loadHistory} />
-        : <BulkForm products={products} onAdded={loadHistory} />
-      }
+      {inputMode === 'single' && <SingleForm products={products} onAdded={loadHistory} />}
+      {inputMode === 'bulk'   && <BulkForm   products={products} onAdded={loadHistory} />}
+      {inputMode === 'grid'   && <GridInvForm products={products} onAdded={loadHistory} />}
 
       {(deleteError || editError) && (
         <div className="p-3 bg-red-50 border border-red-200 rounded-lg text-red-600 text-sm">
