@@ -18,7 +18,7 @@ export default function StockStatus() {
     return v ? Number(v) : 3
   })
 
-  const monthStr    = String(dayjs().month() + 1)
+  const monthStr    = dayjs().format('YYYY-MM')
   const daysElapsed = Math.max(dayjs().date(), 1)
 
   const monthOutMap = useMemo(() => {

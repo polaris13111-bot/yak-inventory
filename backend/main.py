@@ -1,11 +1,12 @@
 import asyncio
 import json
 import os
+import re
 import shutil
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime, date as date_type
-from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form
+from datetime import datetime, timedelta, date as date_type
+from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -14,8 +15,34 @@ from sqlalchemy import func, text
 from pydantic import BaseModel
 from typing import Optional
 from openpyxl import Workbook, load_workbook
+from jose import JWTError, jwt
 
 from models import ENGINE, init_db, Product, Order, InventoryItem, InventoryType, MappingRule
+
+# ── JWT 설정 ──────────────────────────────────────────────
+_JWT_SECRET  = os.getenv('JWT_SECRET', 'yak-jwt-secret-2026')
+_JWT_ALG     = 'HS256'
+_TOKEN_EXP_H = 24  # 토큰 유효시간 (시간)
+_ADMIN_PW    = os.getenv('ADMIN_PASSWORD',  'newface')
+_VIEWER_PW   = os.getenv('VIEWER_PASSWORD', 'blackyak')
+
+def _create_token(role: str) -> str:
+    exp = datetime.utcnow() + timedelta(hours=_TOKEN_EXP_H)
+    return jwt.encode({'sub': role, 'exp': exp}, _JWT_SECRET, algorithm=_JWT_ALG)
+
+def _verify_token(authorization: Optional[str] = Header(None)) -> str:
+    if not authorization or not authorization.startswith('Bearer '):
+        raise HTTPException(401, '인증이 필요합니다')
+    try:
+        payload = jwt.decode(authorization.split(' ')[1], _JWT_SECRET, algorithms=[_JWT_ALG])
+        return payload.get('sub', '')
+    except JWTError:
+        raise HTTPException(401, '유효하지 않은 토큰입니다')
+
+def _require_admin(role: str = Depends(_verify_token)) -> str:
+    if role != 'admin':
+        raise HTTPException(403, '관리자 권한이 필요합니다')
+    return role
 
 init_db()
 with ENGINE.connect() as _conn:
@@ -25,6 +52,30 @@ with ENGINE.connect() as _conn:
     except Exception:
         pass  # column already exists
 SessionLocal = sessionmaker(bind=ENGINE)
+
+# ── 날짜 자동 마이그레이션: M.DD → YYYY-MM-DD ────────────
+_DATE_OLD = re.compile(r'^(\d{1,2})\.(\d{2})$')
+
+def _migrate_dates():
+    """기존 M.DD 형식 날짜를 YYYY-MM-DD 로 일괄 변환 (앱 시작 시 1회)."""
+    db = SessionLocal()
+    try:
+        year = datetime.now().year
+        changed = 0
+        for model in (Order, InventoryItem):
+            for row in db.query(model).all():
+                m = _DATE_OLD.match(row.date or '')
+                if m:
+                    row.date = f'{year}-{int(m.group(1)):02d}-{int(m.group(2)):02d}'
+                    changed += 1
+        if changed:
+            db.commit()
+            _sync_db()
+            print(f'[migrate] 날짜 {changed}건 변환 완료 → YYYY-MM-DD')
+    except Exception as e:
+        print(f'[migrate] 실패: {e}')
+    finally:
+        db.close()
 
 # ── GCS 동기화: 쓰기 후 /tmp/yak.db → /data/yak.db 복사 ──
 def _sync_db():
@@ -63,6 +114,7 @@ def _seed_products():
         print(f'[seed] 실패: {e}')
 
 _seed_products()
+_migrate_dates()
 
 app = FastAPI(title='야크 재고관리 API')
 
@@ -182,9 +234,23 @@ class MappingRuleOut(MappingRuleIn):
 class ResolveIn(BaseModel):
     product_name: str   # 상품명 원본 텍스트
 
+class LoginIn(BaseModel):
+    password: str
+
+
+# ─── 인증 ────────────────────────────────────────────────
+
+@app.post('/auth/login')
+def login(data: LoginIn):
+    if data.password == _ADMIN_PW:
+        return {'token': _create_token('admin'), 'role': 'admin'}
+    if data.password == _VIEWER_PW:
+        return {'token': _create_token('viewer'), 'role': 'viewer'}
+    raise HTTPException(401, '비밀번호가 틀렸습니다')
+
 
 @app.post('/admin/seed-products')
-def seed_products_api(db: Session = Depends(get_db)):
+def seed_products_api(db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     cnt = db.query(Product).count()
     if cnt > 0:
         return {'ok': False, 'message': f'이미 {cnt}개 상품 존재'}
@@ -199,7 +265,7 @@ def get_products(db: Session = Depends(get_db)):
 
 
 @app.post('/products', response_model=ProductOut)
-def create_product(data: ProductIn, db: Session = Depends(get_db)):
+def create_product(data: ProductIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     # 중복 체크
     exists = db.query(Product).filter(
         Product.name == data.name,
@@ -216,7 +282,7 @@ def create_product(data: ProductIn, db: Session = Depends(get_db)):
 
 
 @app.put('/products/{product_id}', response_model=ProductOut)
-def update_product(product_id: int, data: ProductIn, db: Session = Depends(get_db)):
+def update_product(product_id: int, data: ProductIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     p = db.get(Product, product_id)
     if not p:
         raise HTTPException(404, '제품을 찾을 수 없습니다')
@@ -230,7 +296,7 @@ def update_product(product_id: int, data: ProductIn, db: Session = Depends(get_d
 
 
 @app.delete('/products/{product_id}')
-def delete_product(product_id: int, db: Session = Depends(get_db)):
+def delete_product(product_id: int, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     p = db.get(Product, product_id)
     if not p:
         raise HTTPException(404, '제품을 찾을 수 없습니다')
@@ -240,7 +306,7 @@ def delete_product(product_id: int, db: Session = Depends(get_db)):
 
 
 @app.patch('/products/{product_id}/toggle-active', response_model=ProductOut)
-def toggle_product_active(product_id: int, db: Session = Depends(get_db)):
+def toggle_product_active(product_id: int, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     p = db.get(Product, product_id)
     if not p:
         raise HTTPException(404, '제품을 찾을 수 없습니다')
@@ -257,17 +323,19 @@ def get_orders(
     month: Optional[str] = None,
     date: Optional[str] = None,
     db: Session = Depends(get_db),
+    _role: str = Depends(_verify_token),
 ):
     q = db.query(Order)
     if month:
-        q = q.filter(Order.date.like(f'{month}.%'))
+        # month: "2026-04" → LIKE '2026-04-%'
+        q = q.filter(Order.date.like(f'{month}-%'))
     if date:
         q = q.filter(Order.date == date)
     return q.order_by(Order.date).all()
 
 
 @app.post('/orders', response_model=OrderOut)
-def create_order(data: OrderIn, db: Session = Depends(get_db)):
+def create_order(data: OrderIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     if not db.get(Product, data.product_id):
         raise HTTPException(404, '제품을 찾을 수 없습니다')
     order = Order(**data.model_dump())
@@ -278,7 +346,7 @@ def create_order(data: OrderIn, db: Session = Depends(get_db)):
 
 
 @app.put('/orders/{order_id}', response_model=OrderOut)
-def update_order(order_id: int, data: OrderIn, db: Session = Depends(get_db)):
+def update_order(order_id: int, data: OrderIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(404, '발주를 찾을 수 없습니다')
@@ -292,7 +360,7 @@ def update_order(order_id: int, data: OrderIn, db: Session = Depends(get_db)):
 
 
 @app.delete('/orders/{order_id}')
-def delete_order(order_id: int, db: Session = Depends(get_db)):
+def delete_order(order_id: int, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     order = db.get(Order, order_id)
     if not order:
         raise HTTPException(404, '발주를 찾을 수 없습니다')
@@ -301,7 +369,7 @@ def delete_order(order_id: int, db: Session = Depends(get_db)):
     return {'ok': True}
 
 @app.post('/orders/batch-delete')
-def batch_delete_orders(body: dict, db: Session = Depends(get_db)):
+def batch_delete_orders(body: dict, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     from sqlalchemy import delete as sa_delete
     ids: list[int] = body.get('ids', [])
     if not ids:
@@ -311,7 +379,7 @@ def batch_delete_orders(body: dict, db: Session = Depends(get_db)):
     return {'deleted': result.rowcount}
 
 @app.post('/inventory/batch-delete')
-def batch_delete_inventory(body: dict, db: Session = Depends(get_db)):
+def batch_delete_inventory(body: dict, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     from sqlalchemy import delete as sa_delete
     ids: list[int] = body.get('ids', [])
     if not ids:
@@ -321,7 +389,7 @@ def batch_delete_inventory(body: dict, db: Session = Depends(get_db)):
     return {'deleted': result.rowcount}
 
 @app.post('/orders/bulk')
-def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
+def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     if len(data) > 500:
         raise HTTPException(400, f'한 번에 최대 500건까지 등록 가능합니다 (요청: {len(data)}건)')
     for order_data in data:
@@ -333,15 +401,15 @@ def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db)):
 # ─── 입고 ────────────────────────────────────────────────
 
 @app.get('/inventory', response_model=list[InventoryOut])
-def get_inventory(month: Optional[str] = None, db: Session = Depends(get_db)):
+def get_inventory(month: Optional[str] = None, db: Session = Depends(get_db), _role: str = Depends(_verify_token)):
     q = db.query(InventoryItem)
     if month:
-        q = q.filter(InventoryItem.date.like(f'{month}.%'))
+        q = q.filter(InventoryItem.date.like(f'{month}-%'))
     return q.order_by(InventoryItem.date).all()
 
 
 @app.post('/inventory', response_model=InventoryOut)
-def create_inventory(data: InventoryIn, db: Session = Depends(get_db)):
+def create_inventory(data: InventoryIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     if not db.get(Product, data.product_id):
         raise HTTPException(404, '제품을 찾을 수 없습니다')
     item = InventoryItem(**data.model_dump())
@@ -352,7 +420,7 @@ def create_inventory(data: InventoryIn, db: Session = Depends(get_db)):
 
 
 @app.post('/inventory/bulk')
-def create_inventory_bulk(data: list[InventoryIn], db: Session = Depends(get_db)):
+def create_inventory_bulk(data: list[InventoryIn], db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     if len(data) > 500:
         raise HTTPException(400, f'한 번에 최대 500건까지 등록 가능합니다 (요청: {len(data)}건)')
     for item_data in data:
@@ -362,7 +430,7 @@ def create_inventory_bulk(data: list[InventoryIn], db: Session = Depends(get_db)
 
 
 @app.put('/inventory/{item_id}', response_model=InventoryOut)
-def update_inventory(item_id: int, data: InventoryIn, db: Session = Depends(get_db)):
+def update_inventory(item_id: int, data: InventoryIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     item = db.get(InventoryItem, item_id)
     if not item:
         raise HTTPException(404, '입고 항목을 찾을 수 없습니다')
@@ -376,7 +444,7 @@ def update_inventory(item_id: int, data: InventoryIn, db: Session = Depends(get_
 
 
 @app.delete('/inventory/{item_id}')
-def delete_inventory(item_id: int, db: Session = Depends(get_db)):
+def delete_inventory(item_id: int, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     item = db.get(InventoryItem, item_id)
     if not item:
         raise HTTPException(404, '입고 항목을 찾을 수 없습니다')
@@ -388,19 +456,19 @@ def delete_inventory(item_id: int, db: Session = Depends(get_db)):
 # ─── 재고 현황 ───────────────────────────────────────────
 
 @app.get('/stock/summary', response_model=list[StockSummaryOut])
-def get_stock_summary(month: Optional[str] = None, db: Session = Depends(get_db)):
+def get_stock_summary(month: Optional[str] = None, db: Session = Depends(get_db), _role: str = Depends(_verify_token)):
     products = db.query(Product).order_by(Product.name, Product.color, Product.size).all()
 
     inv_q = db.query(InventoryItem.product_id, func.sum(InventoryItem.quantity).label('total'))
     if month:
-        inv_q = inv_q.filter(InventoryItem.date.like(f'{month}.%'))
+        inv_q = inv_q.filter(InventoryItem.date.like(f'{month}-%'))
     # 불량 입고는 현재고에서 제외
     inv_q = inv_q.filter(InventoryItem.type != InventoryType.defective)
     inv_map = {r.product_id: r.total for r in inv_q.group_by(InventoryItem.product_id).all()}
 
     ord_q = db.query(Order.product_id, func.sum(Order.quantity).label('total'))
     if month:
-        ord_q = ord_q.filter(Order.date.like(f'{month}.%'))
+        ord_q = ord_q.filter(Order.date.like(f'{month}-%'))
     ord_map = {r.product_id: r.total for r in ord_q.group_by(Order.product_id).all()}
 
     result = []
@@ -416,11 +484,11 @@ def get_stock_summary(month: Optional[str] = None, db: Session = Depends(get_db)
 
 
 @app.get('/stock/daily', response_model=list[DailyOutboundOut])
-def get_daily_outbound(month: str, db: Session = Depends(get_db)):
+def get_daily_outbound(month: str, db: Session = Depends(get_db), _role: str = Depends(_verify_token)):
     rows = db.query(
         Order.date, Order.product_id,
         func.sum(Order.quantity).label('quantity'),
-    ).filter(Order.date.like(f'{month}.%')).group_by(Order.date, Order.product_id).all()
+    ).filter(Order.date.like(f'{month}-%')).group_by(Order.date, Order.product_id).all()
     return [DailyOutboundOut(date=r.date, product_id=r.product_id, quantity=r.quantity)
             for r in rows]
 
@@ -434,7 +502,7 @@ def get_mapping_rules(db: Session = Depends(get_db)):
 
 
 @app.post('/mapping-rules', response_model=MappingRuleOut)
-def create_mapping_rule(data: MappingRuleIn, db: Session = Depends(get_db)):
+def create_mapping_rule(data: MappingRuleIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     rule = MappingRule(
         rule_name=data.rule_name,
         product_id=data.product_id,
@@ -450,7 +518,7 @@ def create_mapping_rule(data: MappingRuleIn, db: Session = Depends(get_db)):
 
 
 @app.put('/mapping-rules/{rule_id}', response_model=MappingRuleOut)
-def update_mapping_rule(rule_id: int, data: MappingRuleIn, db: Session = Depends(get_db)):
+def update_mapping_rule(rule_id: int, data: MappingRuleIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     rule = db.get(MappingRule, rule_id)
     if not rule:
         raise HTTPException(404, '규칙을 찾을 수 없습니다')
@@ -466,7 +534,7 @@ def update_mapping_rule(rule_id: int, data: MappingRuleIn, db: Session = Depends
 
 
 @app.delete('/mapping-rules/{rule_id}')
-def delete_mapping_rule(rule_id: int, db: Session = Depends(get_db)):
+def delete_mapping_rule(rule_id: int, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     rule = db.get(MappingRule, rule_id)
     if not rule:
         raise HTTPException(404, '규칙을 찾을 수 없습니다')
@@ -476,7 +544,7 @@ def delete_mapping_rule(rule_id: int, db: Session = Depends(get_db)):
 
 
 @app.patch('/mapping-rules/{rule_id}/toggle')
-def toggle_mapping_rule(rule_id: int, db: Session = Depends(get_db)):
+def toggle_mapping_rule(rule_id: int, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     rule = db.get(MappingRule, rule_id)
     if not rule:
         raise HTTPException(404, '규칙을 찾을 수 없습니다')
@@ -514,7 +582,7 @@ def resolve_product(data: ResolveIn, db: Session = Depends(get_db)):
 
 
 @app.post('/mapping-rules/seed-defaults')
-def seed_default_rules(db: Session = Depends(get_db)):
+def seed_default_rules(db: Session = Depends(get_db), _: str = Depends(_require_admin)):
     """
     스프레드시트 출고관리 검색조건 기반 기본 규칙 자동 생성.
     이미 규칙이 있으면 건너뜀.
@@ -635,6 +703,7 @@ async def backup_import(
     file: UploadFile = File(...),
     mode: str = Form('append'),
     db: Session = Depends(get_db),
+    _: str = Depends(_require_admin),
 ):
     content = await file.read()
     try:

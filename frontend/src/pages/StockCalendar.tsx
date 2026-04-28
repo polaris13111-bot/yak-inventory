@@ -34,8 +34,8 @@ export default function StockCalendar() {
   const [dayOrders, setDayOrders] = useState<Order[]>([])
   const [loading, setLoading]     = useState(true)
 
-  const monthStr = `${month}`
-  const todayStr = dayjs().format('M.DD')  // e.g. "4.17"
+  const monthStr = `${year}-${String(month).padStart(2,'0')}`
+  const todayStr = dayjs().format('YYYY-MM-DD')
 
   const [loadError, setLoadError] = useState(false)
 
@@ -58,8 +58,8 @@ export default function StockCalendar() {
 
   const dates = useMemo(() => Array.from({ length: daysInMonth }, (_, i) => {
     const d = i + 1
-    const dateStr = `${month}.${String(d).padStart(2, '0')}`
-    const dow = dayjs(`${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`).day()
+    const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
+    const dow = dayjs(dateStr).day()
     return { dateStr, day: d, dow }
   }), [month, year, daysInMonth])
 
@@ -136,7 +136,7 @@ export default function StockCalendar() {
           <div>
             <p className="font-bold text-slate-800 text-sm">{selectedDate}</p>
             <p className="text-xs text-slate-400 mt-0.5">
-              {DAY_KO[dayjs(`${year}-${String(month).padStart(2,'0')}-${selectedDate.split('.')[1]}`).day()]}요일
+              {DAY_KO[dayjs(`${year}-${String(month).padStart(2,'0')}-${selectedDate.split('-')[2]}`).day()]}요일
               · {dayOrders.length}건 발주
             </p>
           </div>
@@ -482,7 +482,7 @@ export default function StockCalendar() {
             <div>
               <p className="font-bold text-slate-800 text-sm">{selectedDate}</p>
               <p className="text-xs text-slate-400 mt-0.5">
-                {DAY_KO[dayjs(`${year}-${String(month).padStart(2,'0')}-${selectedDate.split('.')[1]}`).day()]}요일
+                {DAY_KO[dayjs(`${year}-${String(month).padStart(2,'0')}-${selectedDate.split('-')[2]}`).day()]}요일
                 · {dayOrders.length}건 발주
               </p>
             </div>

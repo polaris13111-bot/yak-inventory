@@ -5,6 +5,29 @@ const api = axios.create({
   baseURL: import.meta.env.VITE_API_URL ?? '',
 })
 
+// ── Bearer 토큰 자동 첨부 ────────────────────────────────
+api.interceptors.request.use(config => {
+  const token = localStorage.getItem('yak_token')
+  if (token) config.headers['Authorization'] = `Bearer ${token}`
+  return config
+})
+
+// ── 401 → 토큰 삭제 (로그인 화면으로 돌아가게 됨) ────────
+api.interceptors.response.use(
+  res => res,
+  err => {
+    if (err.response?.status === 401) {
+      localStorage.removeItem('yak_token')
+      localStorage.removeItem('yak_role')
+    }
+    return Promise.reject(err)
+  }
+)
+
+// ── 인증 ─────────────────────────────────────────────────
+export const loginApi = (password: string) =>
+  api.post<{ token: string; role: 'admin' | 'viewer' }>('/auth/login', { password }).then(r => r.data)
+
 // 제품
 export const getProducts = () =>
   api.get<Product[]>('/products').then(r => r.data)

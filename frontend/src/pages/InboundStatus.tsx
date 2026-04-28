@@ -12,7 +12,7 @@ export default function InboundStatus() {
   const [loading, setLoading] = useState(true)
   const [loadError, setLoadError] = useState(false)
 
-  const monthStr = `${month}`
+  const monthStr = `${year}-${String(month).padStart(2,'0')}`
 
   useEffect(() => {
     setLoading(true)

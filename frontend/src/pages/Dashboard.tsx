@@ -6,9 +6,9 @@ import type { StockSummary, Order, InventoryItem } from '../types'
 
 export default function Dashboard() {
   const today        = dayjs()
-  const monthStr     = String(today.month() + 1)
-  const prevMonthStr = String(today.month() === 0 ? 12 : today.month())
-  const todayStr     = today.format('M.DD')
+  const monthStr     = today.format('YYYY-MM')
+  const prevMonthStr = today.subtract(1, 'month').format('YYYY-MM')
+  const todayStr     = today.format('YYYY-MM-DD')
 
   const [summaryAll, setSummaryAll]         = useState<StockSummary[]>([])
   const [summaryMonth, setSummaryMonth]     = useState<StockSummary[]>([])

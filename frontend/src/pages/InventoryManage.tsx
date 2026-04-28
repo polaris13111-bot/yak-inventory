@@ -56,7 +56,7 @@ interface BulkInvRow {
 }
 
 const EMPTY_INV_ROW = (): BulkInvRow => ({
-  date: dayjs().format('M.DD'),
+  date: dayjs().format('YYYY-MM-DD'),
   productName: '',
   quantity: '1',
   type: 'normal',
@@ -73,7 +73,7 @@ function SingleForm({
 }) {
   const [type, setType]       = useState<InvType>('normal')
   const [product_id, setPid]  = useState<number | ''>('')
-  const [date, setDate]       = useState(dayjs().format('M.DD'))
+  const [date, setDate]       = useState(dayjs().format('YYYY-MM-DD'))
   const [qty, setQty]         = useState('1')
   const [notes, setNotes]     = useState('')
   const [submitted, setSubmitted] = useState(false)
@@ -165,7 +165,7 @@ function SingleForm({
 
 // ─── 그리드 대량 입력 ─────────────────────────────────────
 function GridInvForm({ products, onAdded }: { products: Product[]; onAdded: () => void }) {
-  const [date, setDate]       = useState(dayjs().format('M.DD'))
+  const [date, setDate]       = useState(dayjs().format('YYYY-MM-DD'))
   const [type, setType]       = useState<InvType>('normal')
   const [notes, setNotes]     = useState('')
   const [quantities, setQty]  = useState<Record<number, string>>({})
@@ -418,7 +418,7 @@ function BulkForm({
     return dataLines.map(line => {
       const cells = splitLine(line)
       const row: BulkInvRow = {
-        date: dayjs().format('M.DD'),
+        date: dayjs().format('YYYY-MM-DD'),
         productName: '',
         quantity: '1',
         type: 'normal',
@@ -429,6 +429,13 @@ function BulkForm({
           if (field === 'type') {
             const v = cells[idx].toLowerCase()
             row.type = (v.includes('반품') || v === 'return') ? 'return' : 'normal'
+          } else if (field === 'date') {
+            // M.DD → YYYY-MM-DD 자동 변환
+            const raw = cells[idx]
+            const oldFmt = raw.match(/^(\d{1,2})\.(\d{2})$/)
+            row.date = oldFmt
+              ? `${dayjs().year()}-${String(Number(oldFmt[1])).padStart(2,'0')}-${oldFmt[2]}`
+              : raw
           } else {
             ;(row as unknown as Record<string, string>)[field] = cells[idx]
           }

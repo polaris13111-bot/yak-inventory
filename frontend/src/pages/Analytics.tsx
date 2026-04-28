@@ -28,9 +28,8 @@ export default function Analytics() {
   const [selectedName, setSelectedName] = useState<string | null>(null)
   const [drillMode, setDrillMode]       = useState<'color' | 'size'>('color')
 
-  const monthStr    = `${month}`
-  const prevMonth   = month === 1 ? 12 : month - 1
-  const prevMonthStr = `${prevMonth}`
+  const monthStr    = `${year}-${String(month).padStart(2,'0')}`
+  const prevMonthStr = dayjs(`${year}-${String(month).padStart(2,'0')}-01`).subtract(1, 'month').format('YYYY-MM')
 
   useEffect(() => {
     setLoading(true)
@@ -67,7 +66,7 @@ export default function Analytics() {
     for (const row of outbound) daily[row.date] = (daily[row.date] ?? 0) + row.quantity
     return Array.from({ length: daysInMonth }, (_, i) => {
       const d = i + 1
-      const dateStr = `${month}.${String(d).padStart(2,'0')}`
+      const dateStr = `${year}-${String(month).padStart(2,'0')}-${String(d).padStart(2,'0')}`
       return { day: `${d}일`, qty: daily[dateStr] ?? 0 }
     })
   }, [outbound, daysInMonth, month])

@@ -1,45 +1,72 @@
 import { createContext, useContext, useState, useCallback, type ReactNode } from 'react'
+import { loginApi } from '../api'
 
 interface AdminContextType {
   isAdmin: boolean
   isViewer: boolean
-  loginAdmin: (password: string) => boolean
-  loginViewer: (password: string) => boolean
-  login: (password: string) => boolean  // 기존 호환
+  loginAdmin: (password: string) => Promise<boolean>
+  loginViewer: (password: string) => Promise<boolean>
+  login: (password: string) => Promise<boolean>  // 기존 호환
   logout: () => void
 }
-
-const ADMIN_PASSWORD  = 'newface'
-const VIEWER_PASSWORD = 'blackyak'
 
 const AdminContext = createContext<AdminContextType>({
   isAdmin: false,
   isViewer: false,
-  loginAdmin: () => false,
-  loginViewer: () => false,
-  login: () => false,
+  loginAdmin: async () => false,
+  loginViewer: async () => false,
+  login: async () => false,
   logout: () => {},
 })
 
 const SKIP_AUTH = import.meta.env.VITE_SKIP_AUTH === 'true'
 
 export function AdminProvider({ children }: { children: ReactNode }) {
-  const [isAdmin, setIsAdmin]   = useState(SKIP_AUTH)
-  const [isViewer, setIsViewer] = useState(false)
+  const [isAdmin, setIsAdmin]   = useState(() => {
+    if (SKIP_AUTH) return true
+    return localStorage.getItem('yak_role') === 'admin'
+  })
+  const [isViewer, setIsViewer] = useState(() => {
+    if (SKIP_AUTH) return false
+    return localStorage.getItem('yak_role') === 'viewer'
+  })
 
-  const loginAdmin = useCallback((pw: string) => {
-    if (pw === ADMIN_PASSWORD) { setIsAdmin(true); setIsViewer(false); return true }
+  const loginAdmin = useCallback(async (pw: string): Promise<boolean> => {
+    try {
+      const { token, role } = await loginApi(pw)
+      if (role === 'admin') {
+        localStorage.setItem('yak_token', token)
+        localStorage.setItem('yak_role', 'admin')
+        setIsAdmin(true)
+        setIsViewer(false)
+        return true
+      }
+    } catch { /* 비밀번호 틀림 */ }
     return false
   }, [])
 
-  const loginViewer = useCallback((pw: string) => {
-    if (pw === VIEWER_PASSWORD) { setIsViewer(true); setIsAdmin(false); return true }
+  const loginViewer = useCallback(async (pw: string): Promise<boolean> => {
+    try {
+      const { token, role } = await loginApi(pw)
+      if (role === 'viewer' || role === 'admin') {
+        localStorage.setItem('yak_token', token)
+        localStorage.setItem('yak_role', role)
+        setIsViewer(true)
+        setIsAdmin(role === 'admin')
+        return true
+      }
+    } catch { /* 비밀번호 틀림 */ }
     return false
   }, [])
 
   const login = loginAdmin  // 기존 PasswordModal 호환
 
-  const logout = useCallback(() => { setIsAdmin(false); setIsViewer(false) }, [])
+  const logout = useCallback(() => {
+    localStorage.removeItem('yak_token')
+    localStorage.removeItem('yak_role')
+    setIsAdmin(false)
+    setIsViewer(false)
+  }, [])
 
   return (
     <AdminContext.Provider value={{ isAdmin, isViewer, loginAdmin, loginViewer, login, logout }}>

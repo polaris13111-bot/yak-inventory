@@ -53,8 +53,8 @@ const BULK_COLS: { key: keyof BulkRow; label: string; width: string; placeholder
 ]
 
 const EMPTY_ROW = (): BulkRow => ({
-  date: dayjs().format('M.DD'), productName: '', color: '', size: '',
-  quantity: '1', order_date: dayjs().format('M.DD'), storage: '뉴페이스',
+  date: dayjs().format('YYYY-MM-DD'), productName: '', color: '', size: '',
+  quantity: '1', order_date: dayjs().format('YYYY-MM-DD'), storage: '뉴페이스',
   mall: '', orderer: '', recipient: '', phone: '', address: '', memo: '',
 })
 
@@ -65,8 +65,8 @@ interface SingleFormData {
   orderer: string; recipient: string; phone: string; address: string; memo: string
 }
 const SINGLE_INIT: SingleFormData = {
-  date: dayjs().format('M.DD'), product_id: '', quantity: '1',
-  order_date: dayjs().format('M.DD'), storage: '뉴페이스', mall: '',
+  date: dayjs().format('YYYY-MM-DD'), product_id: '', quantity: '1',
+  order_date: dayjs().format('YYYY-MM-DD'), storage: '뉴페이스', mall: '',
   orderer: '', recipient: '', phone: '', address: '', memo: '',
 }
 
@@ -182,8 +182,8 @@ function SingleForm({ products }: { products: Product[] }) {
 
 // ─── 그리드 대량 발주 ─────────────────────────────────────
 function GridOrderForm({ products }: { products: Product[] }) {
-  const [date, setDate]         = useState(dayjs().format('M.DD'))
-  const [orderDate, setODate]   = useState(dayjs().format('M.DD'))
+  const [date, setDate]         = useState(dayjs().format('YYYY-MM-DD'))
+  const [orderDate, setODate]   = useState(dayjs().format('YYYY-MM-DD'))
   const [storage, setStorage]   = useState('뉴페이스')
   const [mall, setMall]         = useState('')
   const [orderer, setOrderer]   = useState('')
@@ -361,7 +361,7 @@ function BulkForm({ products }: { products: Product[] }) {
   const fileRef = useRef<HTMLInputElement>(null)
 
   useEffect(() => {
-    getOrders({ date: dayjs().format('M.DD') }).then(setExistingOrders).catch(() => {})
+    getOrders({ date: dayjs().format('YYYY-MM-DD') }).then(setExistingOrders).catch(() => {})
   }, [])
 
   const existingSet = useMemo(() => {
@@ -455,7 +455,15 @@ function BulkForm({ products }: { products: Product[] }) {
       }
       colMap.forEach((field, i) => {
         if (field && cells[i] !== undefined && cells[i] !== '') {
-          (row as unknown as Record<string, string>)[field] = cells[i]
+          if (field === 'date' || field === 'order_date') {
+            const raw = cells[i]
+            const oldFmt = raw.match(/^(\d{1,2})\.(\d{2})$/)
+            ;(row as unknown as Record<string, string>)[field] = oldFmt
+              ? `${dayjs().year()}-${String(Number(oldFmt[1])).padStart(2,'0')}-${oldFmt[2]}`
+              : raw
+          } else {
+            (row as unknown as Record<string, string>)[field] = cells[i]
+          }
         }
       })
       // 날짜 기본값
@@ -596,7 +604,7 @@ function BulkForm({ products }: { products: Product[] }) {
   const errorCount     = rows.filter(r => r._error).length
   const candidateCount = rows.filter(r => !r._resolved && !r._error && r._candidates !== undefined).length
   const dupCount       = rows.filter(r => r._resolved && existingSet.has(`${r._resolved.id}:${r.date}`)).length
-  const hasAnyData     = rows.some(r => r.productName || r.date !== dayjs().format('M.DD'))
+  const hasAnyData     = rows.some(r => r.productName || r.date !== dayjs().format('YYYY-MM-DD'))
 
   return (
     <div className="space-y-4">
@@ -886,9 +894,198 @@ function BulkForm({ products }: { products: Product[] }) {
   )
 }
 
+// ─── 바코드 스캐너 발주 ──────────────────────────────────
+function BarcodeForm({ products }: { products: Product[] }) {
+  const inputRef  = useRef<HTMLInputElement>(null)
+  const [buffer, setBuffer]   = useState('')
+  const [date, setDate]       = useState(dayjs().format('YYYY-MM-DD'))
+  const [storage, setStorage] = useState('뉴페이스')
+  const [mall, setMall]       = useState('')
+  // 스캔된 항목: { product, qty }
+  const [scanned, setScanned] = useState<{ product: Product; qty: number }[]>([])
+  const [lastScan, setLastScan] = useState<{ product: Product; ok: boolean } | null>(null)
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult] = useState<string | null>(null)
+
+  // model_code → product 맵
+  const codeMap = useMemo(() => {
+    const m: Record<string, Product> = {}
+    for (const p of products) {
+      if (p.model_code) m[p.model_code.trim().toUpperCase()] = p
+    }
+    return m
+  }, [products])
+
+  const handleScan = (code: string) => {
+    const key = code.trim().toUpperCase()
+    const product = codeMap[key]
+    if (!product) {
+      setLastScan({ product: { id: -1, name: code, color: '', size: '', model_code: code, active: false }, ok: false })
+      return
+    }
+    setLastScan({ product, ok: true })
+    setScanned(prev => {
+      const idx = prev.findIndex(s => s.product.id === product.id)
+      if (idx >= 0) {
+        const next = [...prev]
+        next[idx] = { ...next[idx], qty: next[idx].qty + 1 }
+        return next
+      }
+      return [...prev, { product, qty: 1 }]
+    })
+  }
+
+  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'Enter') {
+      e.preventDefault()
+      if (buffer.trim()) {
+        handleScan(buffer.trim())
+        setBuffer('')
+      }
+    }
+  }
+
+  const removeItem = (idx: number) => setScanned(prev => prev.filter((_, i) => i !== idx))
+  const adjustQty  = (idx: number, delta: number) => setScanned(prev => {
+    const next = [...prev]
+    const newQty = next[idx].qty + delta
+    if (newQty <= 0) return prev.filter((_, i) => i !== idx)
+    next[idx] = { ...next[idx], qty: newQty }
+    return next
+  })
+
+  const totalCount = scanned.reduce((s, r) => s + r.qty, 0)
+
+  const handleSubmit = async () => {
+    if (scanned.length === 0) return
+    setSubmitting(true)
+    try {
+      const orders = scanned.map(({ product, qty }) => ({
+        date, product_id: product.id, quantity: qty,
+        order_date: date, storage, mall,
+        orderer: '', recipient: '', phone: '', address: '', memo: '',
+      }))
+      await Promise.all(orders.map(o => createOrder(o)))
+      setResult(`${totalCount}건 등록 완료`)
+      setScanned([])
+      setTimeout(() => setResult(null), 2500)
+    } catch {
+      setResult('등록 실패')
+    } finally {
+      setSubmitting(false)
+    }
+  }
+
+  return (
+    <div className="space-y-4" onClick={() => inputRef.current?.focus()}>
+      {/* 숨겨진 스캔 입력 */}
+      <input
+        ref={inputRef}
+        value={buffer}
+        onChange={e => setBuffer(e.target.value)}
+        onKeyDown={handleKeyDown}
+        className="opacity-0 absolute w-0 h-0"
+        autoFocus
+      />
+
+      {/* 스캔 영역 */}
+      <div className="bg-slate-800 text-white rounded-xl p-5 text-center space-y-2 cursor-pointer select-none"
+        onClick={() => inputRef.current?.focus()}>
+        <div className="text-3xl">📷</div>
+        <p className="font-semibold text-sm">바코드를 스캐너로 스캔하세요</p>
+        <p className="text-xs text-slate-400">이 영역 클릭 후 스캔 · USB 스캐너 자동 감지</p>
+        {buffer && (
+          <div className="mt-2 px-3 py-1.5 bg-slate-700 rounded-lg font-mono text-xs text-blue-300">
+            {buffer}▌
+          </div>
+        )}
+      </div>
+
+      {/* 마지막 스캔 결과 */}
+      {lastScan && (
+        <div className={`flex items-center gap-3 px-4 py-3 rounded-lg border text-sm font-medium
+          ${lastScan.ok ? 'bg-green-50 border-green-200 text-green-700' : 'bg-red-50 border-red-200 text-red-600'}`}>
+          {lastScan.ok ? (
+            <>
+              <CheckCircle size={16} />
+              <span>{lastScan.product.name} / {lastScan.product.color} / {lastScan.product.size} +1</span>
+            </>
+          ) : (
+            <>
+              <AlertCircle size={16} />
+              <span>코드 "{lastScan.product.model_code}" 미등록 제품</span>
+            </>
+          )}
+        </div>
+      )}
+
+      {/* 날짜/창고 설정 */}
+      <div className="flex flex-wrap gap-3">
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-slate-500">발주일</label>
+          <input type="date" value={date} onChange={e => setDate(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-slate-500">창고</label>
+          <input value={storage} onChange={e => setStorage(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-28" />
+        </div>
+        <div className="flex flex-col gap-1">
+          <label className="text-xs text-slate-500">매출몰</label>
+          <input value={mall} onChange={e => setMall(e.target.value)}
+            className="border border-slate-200 rounded-lg px-3 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400 w-28" />
+        </div>
+      </div>
+
+      {/* 스캔 목록 */}
+      {scanned.length > 0 && (
+        <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+          <div className="px-4 py-2.5 border-b border-slate-100 flex items-center justify-between">
+            <span className="text-sm font-semibold text-slate-700">스캔 목록</span>
+            <span className="text-xs text-slate-400">총 {totalCount}개</span>
+          </div>
+          <div className="divide-y divide-slate-50">
+            {scanned.map(({ product, qty }, idx) => (
+              <div key={product.id} className="flex items-center gap-3 px-4 py-3">
+                <div className="flex-1 min-w-0">
+                  <p className="text-sm font-medium text-slate-800 truncate">{product.name}</p>
+                  <p className="text-xs text-slate-400">{product.color} / {product.size}</p>
+                </div>
+                <div className="flex items-center gap-2 flex-shrink-0">
+                  <button onClick={() => adjustQty(idx, -1)}
+                    className="w-7 h-7 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-sm font-bold">−</button>
+                  <span className="w-8 text-center font-bold text-slate-800">{qty}</span>
+                  <button onClick={() => adjustQty(idx, 1)}
+                    className="w-7 h-7 rounded-lg border border-slate-200 text-slate-600 hover:bg-slate-100 text-sm font-bold">＋</button>
+                  <button onClick={() => removeItem(idx)} className="text-slate-300 hover:text-red-400 ml-1">
+                    <Trash2 size={14} />
+                  </button>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
+      )}
+
+      {result && (
+        <div className="flex items-center gap-2 px-4 py-3 rounded-lg bg-green-50 border border-green-200 text-green-700 text-sm font-medium">
+          <CheckCircle size={16} />{result}
+        </div>
+      )}
+
+      <button onClick={handleSubmit} disabled={scanned.length === 0 || submitting}
+        className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700
+                   disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
+        {submitting ? '등록 중...' : `${totalCount}건 발주 등록`}
+      </button>
+    </div>
+  )
+}
+
 // ─── 메인 컴포넌트 ────────────────────────────────────────
 export default function OrderInput() {
-  const [mode, setMode]         = useState<'single' | 'bulk'>('single')
+  const [mode, setMode]         = useState<'single' | 'bulk' | 'barcode'>('single')
   const [products, setProducts] = useState<Product[]>([])
 
   useEffect(() => { getProducts().then(setProducts) }, [])
@@ -910,9 +1107,16 @@ export default function OrderInput() {
             ${mode === 'bulk' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
           대량 입력
         </button>
+        <button onClick={() => setMode('barcode')}
+          className={`px-5 py-2 rounded-lg text-sm font-medium transition-colors
+            ${mode === 'barcode' ? 'bg-white text-slate-800 shadow-sm' : 'text-slate-500 hover:text-slate-700'}`}>
+          바코드
+        </button>
       </div>
 
-      {mode === 'single' ? <SingleForm products={products} /> : <BulkForm products={products} />}
+      {mode === 'single'  && <SingleForm products={products} />}
+      {mode === 'bulk'    && <BulkForm   products={products} />}
+      {mode === 'barcode' && <BarcodeForm products={products} />}
     </div>
   )
 }

@@ -3,7 +3,7 @@ import { BrowserRouter, Routes, Route, NavLink } from 'react-router-dom'
 import {
   LayoutDashboard, CalendarDays, ClipboardList, PackagePlus,
   History, Settings, Lock, LockOpen, Eye, X, ShieldCheck, BarChart2,
-  Boxes, PackageCheck, Archive,
+  Boxes, PackageCheck, Archive, ListOrdered,
 } from 'lucide-react'
 import Dashboard from './pages/Dashboard'
 import StockCalendar from './pages/StockCalendar'
@@ -15,6 +15,7 @@ import Analytics from './pages/Analytics'
 import StockStatus from './pages/StockStatus'
 import InboundStatus from './pages/InboundStatus'
 import BackupPage from './pages/Backup'
+import PickingList from './pages/PickingList'
 import { AdminProvider, useAdmin } from './context/AdminContext'
 
 // ─── 네비 정의 ────────────────────────────────────────────
@@ -28,6 +29,7 @@ const VIEWER_NAV = [
 const ADMIN_INPUT_NAV = [
   { to: '/order',     icon: ClipboardList, label: '발주 입력' },
   { to: '/inventory', icon: PackagePlus,   label: '입고 관리' },
+  { to: '/picking',   icon: ListOrdered,   label: '피킹 리스트' },
 ]
 const ADMIN_MANAGE_NAV = [
   { to: '/history',  icon: History,  label: '내역 관리' },
@@ -44,9 +46,9 @@ function PasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
 
   useEffect(() => { inputRef.current?.focus() }, [])
 
-  const handleSubmit = (e: React.FormEvent) => {
+  const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (loginAdmin(pw)) { onSuccess() }
+    if (await loginAdmin(pw)) { onSuccess() }
     else { setError(true); setPw(''); setTimeout(() => setError(false), 1500) }
   }
 
@@ -94,6 +96,7 @@ const COMMON_MOBILE_NAV = [
 const ADMIN_MOBILE_NAV = [
   { to: '/order',     icon: ClipboardList, label: '발주 입력' },
   { to: '/inventory', icon: PackagePlus,   label: '입고 관리' },
+  { to: '/picking',   icon: ListOrdered,   label: '피킹' },
   { to: '/history',   icon: History,       label: '내역 관리' },
 ]
 
@@ -141,7 +144,7 @@ function BottomNav({ onAdminToggle, isAdmin }: { onAdminToggle: () => void; isAd
 
 // ─── 사이드바 + 레이아웃 ──────────────────────────────────
 function Layout() {
-  const { isAdmin, logout } = useAdmin()
+  const { isAdmin, isViewer, logout } = useAdmin()
   const [showModal, setShowModal] = useState(false)
 
   return (
@@ -251,6 +254,7 @@ function Layout() {
           <Route path="/history"   element={isAdmin ? <HistoryPage />       : <Unauthorized />} />
           <Route path="/settings"  element={isAdmin ? <SettingsPage />      : <Unauthorized />} />
           <Route path="/backup"    element={isAdmin ? <BackupPage />        : <Unauthorized />} />
+          <Route path="/picking"   element={(isAdmin || isViewer) ? <PickingList /> : <Unauthorized />} />
         </Routes>
       </main>
 
@@ -339,15 +343,15 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
     if (step !== 'select') inputRef.current?.focus()
   }, [step])
 
-  const handleViewer = (e: React.FormEvent) => {
+  const handleViewer = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (loginViewer(pw)) { onEnter() }
+    if (await loginViewer(pw)) { onEnter() }
     else { setError(true); setPw(''); setTimeout(() => setError(false), 1500) }
   }
 
-  const handleAdmin = (e: React.FormEvent) => {
+  const handleAdmin = async (e: React.FormEvent) => {
     e.preventDefault()
-    if (loginAdmin(pw)) { onEnter() }
+    if (await loginAdmin(pw)) { onEnter() }
     else { setError(true); setPw(''); setTimeout(() => setError(false), 1500) }
   }
 
