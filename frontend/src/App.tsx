@@ -81,6 +81,46 @@ function PasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
   )
 }
 
+// ─── 모바일 하단 탭 ───────────────────────────────────────
+function BottomNav({ onAdminToggle, isAdmin }: { onAdminToggle: () => void; isAdmin: boolean }) {
+  const mobileNav = [
+    { to: '/',          icon: LayoutDashboard, label: '대시보드' },
+    { to: '/calendar',  icon: CalendarDays,    label: '출고' },
+    { to: '/stock',     icon: Boxes,           label: '재고' },
+    ...(isAdmin ? [
+      { to: '/order',     icon: ClipboardList, label: '발주' },
+      { to: '/inventory', icon: PackagePlus,   label: '입고' },
+    ] : [
+      { to: '/inbound',   icon: PackageCheck,  label: '입고현황' },
+      { to: '/analytics', icon: BarChart2,     label: '분석' },
+    ]),
+  ]
+  return (
+    <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-40 md:hidden">
+      <div className="flex items-center">
+        {mobileNav.map(({ to, icon: Icon, label }) => (
+          <NavLink key={to} to={to} end={to === '/'}
+            className={({ isActive }) =>
+              `flex-1 flex flex-col items-center py-2 gap-0.5 text-[10px] font-medium transition-colors
+               ${isActive
+                 ? isAdmin ? 'text-amber-600' : 'text-blue-600'
+                 : 'text-slate-400'}`}>
+            <Icon size={20} />
+            {label}
+          </NavLink>
+        ))}
+        {/* 모드 전환 버튼 */}
+        <button onClick={onAdminToggle}
+          className={`flex-1 flex flex-col items-center py-2 gap-0.5 text-[10px] font-medium transition-colors
+            ${isAdmin ? 'text-amber-600' : 'text-slate-400'}`}>
+          {isAdmin ? <LockOpen size={20} /> : <Lock size={20} />}
+          {isAdmin ? '관리자' : '뷰어'}
+        </button>
+      </div>
+    </nav>
+  )
+}
+
 // ─── 사이드바 + 레이아웃 ──────────────────────────────────
 function Layout() {
   const { isAdmin, logout } = useAdmin()
@@ -92,7 +132,8 @@ function Layout() {
         <PasswordModal onClose={() => setShowModal(false)} onSuccess={() => setShowModal(false)} />
       )}
 
-      <aside className="w-56 bg-white border-r border-slate-200 flex flex-col shadow-sm">
+      {/* 사이드바 — 데스크탑만 */}
+      <aside className="hidden md:flex w-56 bg-white border-r border-slate-200 flex-col shadow-sm">
         <div className="px-5 py-5 border-b border-slate-100">
           <div className="flex items-center gap-2">
             <span className="text-2xl">🏔️</span>
@@ -135,7 +176,6 @@ function Layout() {
 
           {isAdmin ? (
             <div className="mt-4 space-y-3">
-              {/* 입력 그룹 */}
               <div>
                 <p className="px-3 mb-1 text-xs font-semibold text-amber-500 uppercase tracking-wide">입력</p>
                 <div className="space-y-0.5">
@@ -149,7 +189,6 @@ function Layout() {
                   ))}
                 </div>
               </div>
-              {/* 설정·관리 그룹 */}
               <div>
                 <p className="px-3 mb-1 text-xs font-semibold text-amber-500 uppercase tracking-wide">설정·관리</p>
                 <div className="space-y-0.5">
@@ -181,7 +220,8 @@ function Layout() {
         </div>
       </aside>
 
-      <main className="flex-1 overflow-auto">
+      {/* 메인 콘텐츠 */}
+      <main className="flex-1 overflow-auto pb-16 md:pb-0">
         <Routes>
           <Route path="/"          element={<Dashboard />} />
           <Route path="/calendar"  element={<StockCalendar />} />
@@ -195,6 +235,12 @@ function Layout() {
           <Route path="/backup"    element={isAdmin ? <BackupPage />        : <Unauthorized />} />
         </Routes>
       </main>
+
+      {/* 모바일 하단 탭 */}
+      <BottomNav
+        isAdmin={isAdmin}
+        onAdminToggle={() => isAdmin ? logout() : setShowModal(true)}
+      />
     </div>
   )
 }
