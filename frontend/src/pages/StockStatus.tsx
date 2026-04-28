@@ -100,8 +100,8 @@ export default function StockStatus() {
           </div>
 
           {/* 필터 */}
-          <div className="flex gap-3 items-center flex-wrap">
-            <div className="relative flex-1 max-w-xs">
+          <div className="flex gap-2 md:gap-3 items-center flex-wrap">
+            <div className="relative w-full md:flex-1 md:max-w-xs">
               <Search size={14} className="absolute left-3 top-2.5 text-slate-400" />
               <input
                 value={search} onChange={e => setSearch(e.target.value)}
@@ -110,38 +110,41 @@ export default function StockStatus() {
                            focus:outline-none focus:ring-2 focus:ring-blue-400"
               />
             </div>
-            <button onClick={() => setLowOnly(v => !v)}
-              className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors
-                ${lowOnly
-                  ? 'bg-amber-50 border-amber-300 text-amber-700'
-                  : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
-              <AlertCircle size={14} />
-              부족·품절만
-            </button>
-            <div className="relative">
-              <button onClick={() => setShowThreshold(v => !v)}
-                className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border bg-white border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
-                <SlidersHorizontal size={14} />
-                경고기준 {threshold}개
+            <div className="flex items-center gap-2">
+              <button onClick={() => setLowOnly(v => !v)}
+                className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border transition-colors
+                  ${lowOnly
+                    ? 'bg-amber-50 border-amber-300 text-amber-700'
+                    : 'bg-white border-slate-200 text-slate-600 hover:bg-slate-50'}`}>
+                <AlertCircle size={14} />
+                부족·품절만
               </button>
-              {showThreshold && (
-                <div className="absolute top-10 left-0 z-10 bg-white border border-slate-200 rounded-xl shadow-lg p-4 w-52">
-                  <p className="text-xs font-medium text-slate-600 mb-2">재고 경고 기준 (개)</p>
-                  <input type="number" min={1} max={50} value={threshold}
-                    onChange={e => saveThreshold(Number(e.target.value))}
-                    className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-400" />
-                  <p className="text-xs text-slate-400 mt-2">현재고가 이 값 이하이면 "부족"으로 표시</p>
-                  <button onClick={() => setShowThreshold(false)}
-                    className="mt-3 w-full py-1.5 bg-slate-800 text-white text-xs rounded-lg hover:bg-slate-900">확인</button>
-                </div>
-              )}
+              <div className="relative">
+                <button onClick={() => setShowThreshold(v => !v)}
+                  className="flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium border bg-white border-slate-200 text-slate-600 hover:bg-slate-50 transition-colors">
+                  <SlidersHorizontal size={14} />
+                  경고기준 {threshold}개
+                </button>
+                {showThreshold && (
+                  <div className="absolute top-10 left-0 z-10 bg-white border border-slate-200 rounded-xl shadow-lg p-4 w-52">
+                    <p className="text-xs font-medium text-slate-600 mb-2">재고 경고 기준 (개)</p>
+                    <input type="number" min={1} max={50} value={threshold}
+                      onChange={e => saveThreshold(Number(e.target.value))}
+                      className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm text-center focus:outline-none focus:ring-2 focus:ring-blue-400" />
+                    <p className="text-xs text-slate-400 mt-2">현재고가 이 값 이하이면 "부족"으로 표시</p>
+                    <button onClick={() => setShowThreshold(false)}
+                      className="mt-3 w-full py-1.5 bg-slate-800 text-white text-xs rounded-lg hover:bg-slate-900">확인</button>
+                  </div>
+                )}
+              </div>
+              <span className="text-xs text-slate-400">{filtered.length}개 표시 중</span>
             </div>
-            <span className="text-xs text-slate-400">{filtered.length}개 표시 중</span>
           </div>
 
           {/* 테이블 */}
           <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
-            <table className="w-full text-sm">
+            <div className="overflow-x-auto">
+            <table className="w-full text-sm" style={{ minWidth: '640px' }}>
               <thead>
                 <tr className="bg-slate-50 border-b border-slate-200 text-xs text-slate-500 font-semibold uppercase tracking-wide">
                   <th className="px-4 py-3 text-left">제품명</th>
@@ -216,6 +219,7 @@ export default function StockStatus() {
                 )}
               </tbody>
             </table>
+            </div>
           </div>
         </>
       )}
