@@ -205,10 +205,11 @@ function InventoryRow({
             className="w-14 border border-green-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400" />
         </td>
         <td className="px-4 py-2">
-          <select value={form.type ?? 'normal'} onChange={e => setForm(p => ({...p, type: e.target.value as 'normal' | 'return'}))}
+          <select value={form.type ?? 'normal'} onChange={e => setForm(p => ({...p, type: e.target.value as 'normal' | 'return' | 'defective'}))}
             className="border border-green-300 rounded px-2 py-1 text-xs focus:outline-none focus:ring-1 focus:ring-green-400">
             <option value="normal">정상</option>
-            <option value="return">반품</option>
+            <option value="return">변심반품</option>
+            <option value="defective">불량</option>
           </select>
         </td>
         <td className="px-4 py-2">
@@ -240,8 +241,10 @@ function InventoryRow({
       <td className="px-4 py-2.5 text-sm font-bold text-green-700">+{item.quantity}</td>
       <td className="px-4 py-2.5">
         <span className={`text-xs px-2 py-0.5 rounded font-medium
-          ${item.type === 'normal' ? 'bg-green-100 text-green-700' : 'bg-amber-100 text-amber-700'}`}>
-          {item.type === 'normal' ? '정상' : '반품'}
+          ${item.type === 'normal'    ? 'bg-green-100 text-green-700'
+          : item.type === 'return'   ? 'bg-amber-100 text-amber-700'
+          : 'bg-red-100 text-red-600'}`}>
+          {item.type === 'normal' ? '정상' : item.type === 'return' ? '변심반품' : '불량'}
         </span>
       </td>
       <td className="px-4 py-2.5 text-xs text-slate-400">{item.notes}</td>

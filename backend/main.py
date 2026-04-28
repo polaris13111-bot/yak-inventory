@@ -394,6 +394,8 @@ def get_stock_summary(month: Optional[str] = None, db: Session = Depends(get_db)
     inv_q = db.query(InventoryItem.product_id, func.sum(InventoryItem.quantity).label('total'))
     if month:
         inv_q = inv_q.filter(InventoryItem.date.like(f'{month}.%'))
+    # 불량 입고는 현재고에서 제외
+    inv_q = inv_q.filter(InventoryItem.type != InventoryType.defective)
     inv_map = {r.product_id: r.total for r in inv_q.group_by(InventoryItem.product_id).all()}
 
     ord_q = db.query(Order.product_id, func.sum(Order.quantity).label('total'))

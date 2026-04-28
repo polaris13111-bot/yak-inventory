@@ -33,8 +33,9 @@ export default function InboundStatus() {
     return Object.entries(map).sort(([a], [b]) => b.localeCompare(a))
   }, [items])
 
-  const totalQty    = items.reduce((s, it) => s + it.quantity, 0)
-  const returnCount = items.filter(it => it.type === 'return').length
+  const totalQty       = items.reduce((s, it) => s + it.quantity, 0)
+  const returnCount    = items.filter(it => it.type === 'return').length
+  const defectiveCount = items.filter(it => it.type === 'defective').length
 
   return (
     <div className="p-3 md:p-6 space-y-4 md:space-y-5 overflow-auto h-full">
@@ -72,14 +73,16 @@ export default function InboundStatus() {
       ) : (
         <>
           {/* 요약 카드 */}
-          <div className="grid grid-cols-3 gap-3 md:gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {[
-              { label: '총 입고 건수', value: `${items.length}건`,  color: 'text-slate-800' },
-              { label: '총 입고 수량', value: `${totalQty}개`,      color: 'text-blue-600'  },
-              { label: '반품 입고',    value: returnCount > 0 ? `${returnCount}건` : '없음',
-                color: returnCount > 0 ? 'text-amber-600' : 'text-emerald-600' },
+              { label: '총 입고 건수',  value: `${items.length}건`,  color: 'text-slate-800' },
+              { label: '총 입고 수량',  value: `${totalQty}개`,      color: 'text-blue-600'  },
+              { label: '변심반품',      value: returnCount > 0    ? `${returnCount}건`    : '없음',
+                color: returnCount    > 0 ? 'text-amber-600'    : 'text-emerald-600' },
+              { label: '불량 입고',     value: defectiveCount > 0 ? `${defectiveCount}건` : '없음',
+                color: defectiveCount > 0 ? 'text-red-600'      : 'text-emerald-600' },
             ].map(({ label, value, color }) => (
-              <div key={label} className="bg-white rounded-xl border border-slate-100 shadow-sm px-5 py-4">
+              <div key={label} className="bg-white rounded-xl border border-slate-100 shadow-sm px-4 py-3">
                 <p className="text-xs text-slate-400 mb-1">{label}</p>
                 <p className={`text-lg font-bold ${color}`}>{value}</p>
               </div>
@@ -120,7 +123,9 @@ export default function InboundStatus() {
                         </td>
                         <td className="px-4 py-2.5 text-center">
                           {it.type === 'return'
-                            ? <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">반품</span>
+                            ? <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">변심반품</span>
+                            : it.type === 'defective'
+                            ? <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">불량</span>
                             : <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">정상</span>
                           }
                         </td>

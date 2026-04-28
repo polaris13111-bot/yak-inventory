@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
-import { CheckCircle, ChevronDown, Upload, ClipboardPaste, Trash2, AlertCircle, HelpCircle } from 'lucide-react'
+import { CheckCircle, ChevronDown, Upload, ClipboardPaste, Trash2, AlertCircle, HelpCircle, LayoutGrid } from 'lucide-react'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { getProducts, createOrder, createOrdersBulk, getOrders } from '../api'
@@ -180,9 +180,179 @@ function SingleForm({ products }: { products: Product[] }) {
   )
 }
 
+// ─── 그리드 대량 발주 ─────────────────────────────────────
+function GridOrderForm({ products }: { products: Product[] }) {
+  const [date, setDate]         = useState(dayjs().format('M.DD'))
+  const [orderDate, setODate]   = useState(dayjs().format('M.DD'))
+  const [storage, setStorage]   = useState('뉴페이스')
+  const [mall, setMall]         = useState('')
+  const [orderer, setOrderer]   = useState('')
+  const [recipient, setRecip]   = useState('')
+  const [phone, setPhone]       = useState('')
+  const [address, setAddress]   = useState('')
+  const [memo, setMemo]         = useState('')
+  const [quantities, setQty]    = useState<Record<number, string>>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult]     = useState<number | null>(null)
+
+  const grouped = useMemo(() => {
+    const g: Record<string, Record<string, Product[]>> = {}
+    for (const p of products) {
+      if (!g[p.name]) g[p.name] = {}
+      if (!g[p.name][p.color]) g[p.name][p.color] = []
+      g[p.name][p.color].push(p)
+    }
+    return g
+  }, [products])
+
+  const sizesForName = useMemo(() => {
+    const s: Record<string, string[]> = {}
+    for (const [name, colorMap] of Object.entries(grouped)) {
+      const all = [...new Set(Object.values(colorMap).flatMap(ps => ps.map(p => p.size)))]
+      s[name] = all.sort((a, b) => {
+        const na = parseInt(a), nb = parseInt(b)
+        return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.localeCompare(b)
+      })
+    }
+    return s
+  }, [grouped])
+
+  const entries = Object.entries(quantities).filter(([, v]) => v && Number(v) > 0)
+  const totalItems = entries.length
+
+  const setQ = (id: number, val: string) =>
+    setQty(prev => {
+      const next = { ...prev }
+      if (!val || val === '0') delete next[id]
+      else next[id] = val
+      return next
+    })
+
+  const inp = (label: string, val: string, set: (v: string) => void, ph = '', cls = 'w-28') => (
+    <div>
+      <label className="text-xs font-medium text-slate-500 block mb-1">{label}</label>
+      <input value={val} onChange={e => set(e.target.value)} placeholder={ph}
+        className={`${cls} border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400`} />
+    </div>
+  )
+
+  const handleSubmit = async () => {
+    if (totalItems === 0) return
+    setSubmitting(true)
+    try {
+      const payload = entries.map(([id, qty]) => ({
+        date, product_id: Number(id), quantity: Number(qty),
+        order_date: orderDate, storage, mall,
+        orderer, recipient, phone, address, memo,
+      }))
+      const res = await createOrdersBulk(payload)
+      setResult(res.ok)
+      setQty({})
+      setTimeout(() => setResult(null), 2500)
+    } catch { /* ignore */ }
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 공통 설정 */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 space-y-3">
+        <div className="flex flex-wrap gap-3">
+          {inp('발주일', date, setDate, '4.28', 'w-24')}
+          {inp('주문일자', orderDate, setODate, '4.28', 'w-24')}
+          {inp('보관창고', storage, setStorage, '뉴페이스', 'w-28')}
+          {inp('MALL', mall, setMall, '해솔앤코', 'w-28')}
+        </div>
+        <div className="flex flex-wrap gap-3">
+          {inp('주문자', orderer, setOrderer, '홍길동', 'w-24')}
+          {inp('수령인', recipient, setRecip, '홍길동', 'w-24')}
+          {inp('휴대폰', phone, setPhone, '010-0000-0000', 'w-36')}
+          {inp('주소', address, setAddress, '서울시...', 'flex-1 min-w-48')}
+          {inp('메모', memo, setMemo, '', 'w-32')}
+        </div>
+      </div>
+
+      {/* 제품 매트릭스 그리드 */}
+      <div className="space-y-3">
+        {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b, 'ko')).map(([name, colorMap]) => {
+          const sizes = sizesForName[name]
+          return (
+            <div key={name} className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                <span className="text-sm font-semibold text-slate-700">{name}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="text-sm" style={{ minWidth: `${120 + sizes.length * 72}px` }}>
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-28">색상</th>
+                      {sizes.map(s => (
+                        <th key={s} className="px-1 py-2 text-center text-xs font-medium text-slate-500 w-16">{s}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {Object.entries(colorMap).sort(([a], [b]) => a.localeCompare(b, 'ko')).map(([color, prods]) => (
+                      <tr key={color} className="hover:bg-slate-50/40">
+                        <td className="px-3 py-2">
+                          <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-black/10"
+                              style={{ background: getColorHex(color) }} />
+                            {color}
+                          </span>
+                        </td>
+                        {sizes.map(size => {
+                          const prod = prods.find(p => p.size === size)
+                          const val = prod ? (quantities[prod.id] ?? '') : ''
+                          const hasVal = !!val && Number(val) > 0
+                          return (
+                            <td key={size} className="px-1 py-1.5 text-center">
+                              {prod ? (
+                                <input
+                                  type="number" min="0" value={val}
+                                  onChange={e => setQ(prod.id, e.target.value)}
+                                  placeholder="0"
+                                  className={`w-14 text-center border rounded-lg px-1 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400
+                                    ${hasVal ? 'border-blue-300 bg-blue-50 text-blue-700 font-semibold' : 'border-slate-200 text-slate-500'}`}
+                                />
+                              ) : (
+                                <span className="text-slate-200 text-xs select-none">—</span>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {result !== null && (
+        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm font-medium">
+          <CheckCircle size={16} />{result}건 발주 등록 완료
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm text-slate-400">
+          {totalItems > 0 ? `${totalItems}건 발주 예정` : '수량을 입력하세요'}
+        </span>
+        <button onClick={handleSubmit} disabled={totalItems === 0 || submitting}
+          className="px-6 py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700
+                     disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
+          {submitting ? '등록 중...' : `${totalItems}건 발주 등록`}
+        </button>
+      </div>
+    </div>
+  )
+}
+
 // ─── 대량 입력 ────────────────────────────────────────────
 function BulkForm({ products }: { products: Product[] }) {
-  const [subMode, setSubMode]   = useState<'paste' | 'file'>('paste')
+  const [subMode, setSubMode]   = useState<'paste' | 'file' | 'grid'>('paste')
   const [pasteText, setPasteText] = useState('')
   const [rows, setRows]         = useState<BulkRow[]>([EMPTY_ROW()])
   const [submitting, setSubmitting] = useState(false)
@@ -432,7 +602,7 @@ function BulkForm({ products }: { products: Product[] }) {
     <div className="space-y-4">
 
       {/* 대량 입력 서브 모드 */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <button onClick={() => setSubMode('paste')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${subMode === 'paste' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
@@ -442,6 +612,11 @@ function BulkForm({ products }: { products: Product[] }) {
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${subMode === 'file' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
           <Upload size={15} />파일 업로드
+        </button>
+        <button onClick={() => setSubMode('grid')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+            ${subMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+          <LayoutGrid size={15} />그리드 입력
         </button>
       </div>
 
@@ -495,8 +670,10 @@ function BulkForm({ products }: { products: Product[] }) {
         </div>
       )}
 
-      {/* 그리드 (직접 편집 가능) */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+      {subMode === 'grid' && <GridOrderForm products={activeProducts} />}
+
+      {/* 붙여넣기/파일 결과 테이블 */}
+      {subMode !== 'grid' && <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-slate-700">{rows.length}행</span>
@@ -676,10 +853,10 @@ function BulkForm({ products }: { products: Product[] }) {
             {errorCount > 3 && <p className="text-xs text-red-400">+{errorCount - 3}개 더...</p>}
           </div>
         )}
-      </div>
+      </div>}
 
       {/* 결과 메시지 */}
-      {result && (
+      {result && subMode !== 'grid' && (
         <div className={`flex items-center justify-between gap-3 p-3 rounded-lg border text-sm font-medium
           ${result.fail === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
           <div className="flex items-center gap-2">
@@ -696,14 +873,15 @@ function BulkForm({ products }: { products: Product[] }) {
         </div>
       )}
 
-      {/* 등록 버튼 */}
-      <button
-        onClick={handleSubmit}
-        disabled={validCount === 0 || submitting || !hasAnyData}
-        className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700
-                   disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
-        {submitting ? `등록 중...` : `${validCount}건 발주 등록`}
-      </button>
+      {subMode !== 'grid' && (
+        <button
+          onClick={handleSubmit}
+          disabled={validCount === 0 || submitting || !hasAnyData}
+          className="w-full py-3 bg-blue-600 text-white font-semibold rounded-xl hover:bg-blue-700
+                     disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
+          {submitting ? `등록 중...` : `${validCount}건 발주 등록`}
+        </button>
+      )}
     </div>
   )
 }

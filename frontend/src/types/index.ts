@@ -30,7 +30,7 @@ export interface InventoryItem {
   product_id: number
   product?: Product
   quantity: number
-  type: 'normal' | 'return'
+  type: 'normal' | 'return' | 'defective'
   notes: string
   created_at: string
 }

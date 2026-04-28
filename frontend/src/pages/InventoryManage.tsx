@@ -1,19 +1,54 @@
-import { useState, useEffect, useRef, Fragment } from 'react'
-import { PackagePlus, RotateCcw, CheckCircle, ChevronDown, ClipboardPaste, Upload, Trash2, AlertCircle, Pencil, X, Check } from 'lucide-react'
+import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
+import { PackagePlus, RotateCcw, CheckCircle, ChevronDown, ClipboardPaste, Upload, Trash2, AlertCircle, Pencil, X, Check, LayoutGrid, AlertOctagon } from 'lucide-react'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { getProducts, getInventory, createInventory, createInventoryBulk, updateInventory, deleteInventory } from '../api'
+import { getColorHex } from '../utils/colors'
 import type { Product, InventoryItem } from '../types'
 import { autoMatch, findCandidates } from '../utils/matcher'
 import type { MatchResult } from '../utils/matcher'
 import ProductSearch from '../components/ProductSearch'
+
+// ─── 공통: 입고 유형 버튼 + 설명 ────────────────────────────
+type InvType = 'normal' | 'return' | 'defective'
+
+const INV_TYPES: { value: InvType; label: string; icon: React.ReactNode; activeClass: string; desc: string | null }[] = [
+  { value: 'normal',    label: '정상 입고',     icon: <PackagePlus size={15} />, activeClass: 'bg-green-600 text-white', desc: null },
+  { value: 'return',    label: '변심반품 입고', icon: <RotateCcw size={15} />,   activeClass: 'bg-amber-500 text-white', desc: '재고에 더해집니다 (다시 판매 가능)' },
+  { value: 'defective', label: '불량 입고',     icon: <AlertOctagon size={15} />,activeClass: 'bg-red-500 text-white',   desc: '현재고에 포함되지 않습니다 — 불량·파손품 별도 보관' },
+]
+
+function InvTypeSelector({ type, onChange }: { type: InvType; onChange: (t: InvType) => void }) {
+  const current = INV_TYPES.find(t => t.value === type)
+  return (
+    <div className="space-y-2">
+      <div className="flex flex-wrap gap-2">
+        {INV_TYPES.map(t => (
+          <button key={t.value} onClick={() => onChange(t.value)}
+            className={`flex items-center gap-1.5 px-3 py-2 rounded-lg text-sm font-medium transition-colors
+              ${type === t.value ? t.activeClass : 'bg-white text-slate-600 border border-slate-200 hover:bg-slate-50'}`}>
+            {t.icon}{t.label}
+          </button>
+        ))}
+      </div>
+      {current?.desc && (
+        <div className={`flex items-center gap-2 px-3 py-2 rounded-lg text-xs font-medium
+          ${type === 'return'    ? 'bg-amber-50 text-amber-700 border border-amber-200' : ''}
+          ${type === 'defective' ? 'bg-red-50 text-red-700 border border-red-200' : ''}`}>
+          {type === 'defective' ? <AlertOctagon size={13} /> : <RotateCcw size={13} />}
+          {current.desc}
+        </div>
+      )}
+    </div>
+  )
+}
 
 // ─── 대량 입력 행 타입 ────────────────────────────────────
 interface BulkInvRow {
   date: string
   productName: string   // 원본 상품명 (매칭용)
   quantity: string
-  type: 'normal' | 'return'
+  type: InvType
   notes: string
   _resolved?: Product
   _candidates?: MatchResult[]
@@ -36,7 +71,7 @@ function SingleForm({
   products: Product[]
   onAdded: () => void
 }) {
-  const [type, setType]       = useState<'normal' | 'return'>('normal')
+  const [type, setType]       = useState<InvType>('normal')
   const [product_id, setPid]  = useState<number | ''>('')
   const [date, setDate]       = useState(dayjs().format('M.DD'))
   const [qty, setQty]         = useState('1')
@@ -66,25 +101,7 @@ function SingleForm({
 
   return (
     <div className="space-y-4">
-      {/* 입고 유형 탭 */}
-      <div className="flex gap-2">
-        <button onClick={() => setType('normal')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-            ${type === 'normal' ? 'bg-green-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
-          <PackagePlus size={15} />정상 입고
-        </button>
-        <button onClick={() => setType('return')}
-          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
-            ${type === 'return' ? 'bg-amber-500 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
-          <RotateCcw size={15} />반품 입고
-        </button>
-      </div>
-
-      {type === 'return' && (
-        <div className="p-3 bg-amber-50 border border-amber-200 rounded-lg text-sm text-amber-700">
-          반품 입고는 재고에 더해지지만 블랙야크 공유 시 별도 표시됩니다.
-        </div>
-      )}
+      <InvTypeSelector type={type} onChange={setType} />
 
       {submitted && (
         <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700">
@@ -130,16 +147,178 @@ function SingleForm({
         <div>
           <label className="text-xs font-medium text-slate-500 block mb-1">메모</label>
           <input value={notes} onChange={e => setNotes(e.target.value)}
-            placeholder={type === 'return' ? '반품 사유 입력' : '입고 메모'}
+            placeholder={type === 'return' ? '변심반품 사유' : type === 'defective' ? '불량 사유·내용' : '입고 메모'}
             className="w-full border border-slate-200 rounded-lg px-3 py-2.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
         </div>
 
         <button type="submit" disabled={!product_id}
           className={`w-full py-3 text-white font-semibold rounded-xl transition-colors disabled:bg-slate-200 disabled:text-slate-400
-            ${type === 'normal' ? 'bg-green-600 hover:bg-green-700' : 'bg-amber-500 hover:bg-amber-600'}`}>
-          {type === 'normal' ? '정상 입고 등록' : '반품 입고 등록'}
+            ${type === 'normal' ? 'bg-green-600 hover:bg-green-700'
+            : type === 'return' ? 'bg-amber-500 hover:bg-amber-600'
+            : 'bg-red-500 hover:bg-red-600'}`}>
+          {type === 'normal' ? '정상 입고 등록' : type === 'return' ? '변심반품 입고 등록' : '불량 입고 등록'}
         </button>
       </form>
+    </div>
+  )
+}
+
+// ─── 그리드 대량 입력 ─────────────────────────────────────
+function GridInvForm({ products, onAdded }: { products: Product[]; onAdded: () => void }) {
+  const [date, setDate]       = useState(dayjs().format('M.DD'))
+  const [type, setType]       = useState<InvType>('normal')
+  const [notes, setNotes]     = useState('')
+  const [quantities, setQty]  = useState<Record<number, string>>({})
+  const [submitting, setSubmitting] = useState(false)
+  const [result, setResult]   = useState<number | null>(null)
+
+  const activeProducts = useMemo(() => products.filter(p => p.active !== false), [products])
+
+  // 제품명 → 색상 → Product[] 그룹
+  const grouped = useMemo(() => {
+    const g: Record<string, Record<string, Product[]>> = {}
+    for (const p of activeProducts) {
+      if (!g[p.name]) g[p.name] = {}
+      if (!g[p.name][p.color]) g[p.name][p.color] = []
+      g[p.name][p.color].push(p)
+    }
+    return g
+  }, [activeProducts])
+
+  // 각 제품명별 사이즈 목록 (정렬)
+  const sizesForName = useMemo(() => {
+    const s: Record<string, string[]> = {}
+    for (const [name, colorMap] of Object.entries(grouped)) {
+      const all = [...new Set(Object.values(colorMap).flatMap(ps => ps.map(p => p.size)))]
+      s[name] = all.sort((a, b) => {
+        const na = parseInt(a), nb = parseInt(b)
+        return (!isNaN(na) && !isNaN(nb)) ? na - nb : a.localeCompare(b)
+      })
+    }
+    return s
+  }, [grouped])
+
+  const entries = Object.entries(quantities).filter(([, v]) => v && Number(v) > 0)
+  const totalItems = entries.length
+  const totalQty   = entries.reduce((s, [, v]) => s + Number(v), 0)
+
+  const setQ = (id: number, val: string) =>
+    setQty(prev => {
+      const next = { ...prev }
+      if (!val || val === '0') delete next[id]
+      else next[id] = val
+      return next
+    })
+
+  const handleSubmit = async () => {
+    if (totalItems === 0) return
+    setSubmitting(true)
+    try {
+      const payload = entries.map(([id, qty]) => ({
+        date, product_id: Number(id), quantity: Number(qty), type, notes,
+      }))
+      const res = await createInventoryBulk(payload)
+      setResult(res.ok)
+      setQty({})
+      onAdded()
+      setTimeout(() => setResult(null), 2500)
+    } catch { /* ignore */ }
+    setSubmitting(false)
+  }
+
+  return (
+    <div className="space-y-4">
+      {/* 공통 설정 */}
+      <div className="bg-white rounded-xl border border-slate-100 shadow-sm p-4 space-y-3">
+        <div className="flex flex-wrap gap-3 items-end">
+          <div>
+            <label className="text-xs font-medium text-slate-500 block mb-1">입고일</label>
+            <input value={date} onChange={e => setDate(e.target.value)}
+              className="border border-slate-200 rounded-lg px-3 py-2 text-sm w-24 focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+          <div className="flex-1 min-w-48">
+            <label className="text-xs font-medium text-slate-500 block mb-1">메모 (공통)</label>
+            <input value={notes} onChange={e => setNotes(e.target.value)} placeholder="공통 메모 (선택)"
+              className="w-full border border-slate-200 rounded-lg px-3 py-2 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400" />
+          </div>
+        </div>
+        <InvTypeSelector type={type} onChange={setType} />
+      </div>
+
+      {/* 제품 매트릭스 그리드 */}
+      <div className="space-y-3">
+        {Object.entries(grouped).sort(([a], [b]) => a.localeCompare(b, 'ko')).map(([name, colorMap]) => {
+          const sizes = sizesForName[name]
+          return (
+            <div key={name} className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+              <div className="px-4 py-2.5 bg-slate-50 border-b border-slate-100">
+                <span className="text-sm font-semibold text-slate-700">{name}</span>
+              </div>
+              <div className="overflow-x-auto">
+                <table className="text-sm" style={{ minWidth: `${120 + sizes.length * 72}px` }}>
+                  <thead>
+                    <tr className="border-b border-slate-100">
+                      <th className="px-3 py-2 text-left text-xs font-medium text-slate-400 w-28">색상</th>
+                      {sizes.map(s => (
+                        <th key={s} className="px-1 py-2 text-center text-xs font-medium text-slate-500 w-16">{s}</th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody className="divide-y divide-slate-50">
+                    {Object.entries(colorMap).sort(([a], [b]) => a.localeCompare(b, 'ko')).map(([color, prods]) => (
+                      <tr key={color} className="hover:bg-slate-50/40">
+                        <td className="px-3 py-2">
+                          <span className="flex items-center gap-1.5 text-xs font-medium text-slate-600">
+                            <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-black/10"
+                              style={{ background: getColorHex(color) }} />
+                            {color}
+                          </span>
+                        </td>
+                        {sizes.map(size => {
+                          const prod = prods.find(p => p.size === size)
+                          const val = prod ? (quantities[prod.id] ?? '') : ''
+                          const hasVal = !!val && Number(val) > 0
+                          return (
+                            <td key={size} className="px-1 py-1.5 text-center">
+                              {prod ? (
+                                <input
+                                  type="number" min="0" value={val}
+                                  onChange={e => setQ(prod.id, e.target.value)}
+                                  placeholder="0"
+                                  className={`w-14 text-center border rounded-lg px-1 py-1.5 text-sm focus:outline-none focus:ring-2 focus:ring-blue-400
+                                    ${hasVal ? 'border-green-300 bg-green-50 text-green-700 font-semibold' : 'border-slate-200 text-slate-500'}`}
+                                />
+                              ) : (
+                                <span className="text-slate-200 text-xs select-none">—</span>
+                              )}
+                            </td>
+                          )
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </div>
+          )
+        })}
+      </div>
+
+      {result !== null && (
+        <div className="flex items-center gap-2 p-3 bg-green-50 border border-green-200 rounded-lg text-green-700 text-sm font-medium">
+          <CheckCircle size={16} />{result}개 입고 등록 완료
+        </div>
+      )}
+      <div className="flex items-center justify-between gap-4">
+        <span className="text-sm text-slate-400">
+          {totalItems > 0 ? `${totalItems}개 품목 · 총 ${totalQty}개` : '수량을 입력하세요'}
+        </span>
+        <button onClick={handleSubmit} disabled={totalItems === 0 || submitting}
+          className="px-6 py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700
+                     disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
+          {submitting ? '등록 중...' : `${totalQty}개 입고 등록`}
+        </button>
+      </div>
     </div>
   )
 }
@@ -152,7 +331,7 @@ function BulkForm({
   products: Product[]
   onAdded: () => void
 }) {
-  const [subMode, setSubMode]     = useState<'paste' | 'file'>('paste')
+  const [subMode, setSubMode]     = useState<'paste' | 'file' | 'grid'>('paste')
   const [pasteText, setPasteText] = useState('')
   const [rows, setRows]           = useState<BulkInvRow[]>([EMPTY_INV_ROW()])
   const [submitting, setSubmitting] = useState(false)
@@ -357,7 +536,7 @@ function BulkForm({
   return (
     <div className="space-y-4">
       {/* 서브모드 탭 */}
-      <div className="flex gap-2">
+      <div className="flex gap-2 flex-wrap">
         <button onClick={() => setSubMode('paste')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${subMode === 'paste' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
@@ -367,6 +546,11 @@ function BulkForm({
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${subMode === 'file' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
           <Upload size={15} />파일 업로드
+        </button>
+        <button onClick={() => setSubMode('grid')}
+          className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+            ${subMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
+          <LayoutGrid size={15} />그리드 입력
         </button>
       </div>
 
@@ -415,8 +599,10 @@ function BulkForm({
         </div>
       )}
 
-      {/* 그리드 */}
-      <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
+      {subMode === 'grid' && <GridInvForm products={products} onAdded={onAdded} />}
+
+      {/* 붙여넣기/파일 결과 테이블 */}
+      {subMode !== 'grid' && <div className="bg-white rounded-xl border border-slate-100 shadow-sm overflow-hidden">
         <div className="px-4 py-3 border-b border-slate-100 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <span className="text-sm font-semibold text-slate-700">{rows.length}행</span>
@@ -568,9 +754,9 @@ function BulkForm({
             </tbody>
           </table>
         </div>
-      </div>
+      </div>}
 
-      {result && (
+      {result && subMode !== 'grid' && (
         <div className={`flex items-center gap-2 p-3 rounded-lg border text-sm font-medium
           ${result.fail === 0 ? 'bg-green-50 border-green-200 text-green-700' : 'bg-amber-50 border-amber-200 text-amber-700'}`}>
           <CheckCircle size={16} />
@@ -578,11 +764,13 @@ function BulkForm({
         </div>
       )}
 
-      <button onClick={handleSubmit} disabled={validCount === 0 || submitting}
-        className="w-full py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700
-                   disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
-        {submitting ? '등록 중...' : `${validCount}건 입고 등록`}
-      </button>
+      {subMode !== 'grid' && (
+        <button onClick={handleSubmit} disabled={validCount === 0 || submitting}
+          className="w-full py-3 bg-green-600 text-white font-semibold rounded-xl hover:bg-green-700
+                     disabled:bg-slate-200 disabled:text-slate-400 transition-colors">
+          {submitting ? '등록 중...' : `${validCount}건 입고 등록`}
+        </button>
+      )}
     </div>
   )
 }
