@@ -651,7 +651,7 @@ export default function InventoryManage() {
   }
 
   return (
-    <div className="p-6 max-w-4xl space-y-6">
+    <div className="p-3 md:p-6 max-w-4xl space-y-4 md:space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">입고 관리</h1>
         <p className="text-sm text-slate-400 mt-1">정상 입고와 반품 입고를 구분하여 등록하세요</p>

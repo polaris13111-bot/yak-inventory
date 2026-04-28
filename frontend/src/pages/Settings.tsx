@@ -267,7 +267,7 @@ function ProductsTab() {
 // ─── 메인 ─────────────────────────────────────────────────
 export default function Settings() {
   return (
-    <div className="p-6 max-w-5xl space-y-6">
+    <div className="p-3 md:p-6 max-w-5xl space-y-4 md:space-y-6">
       <div>
         <h1 className="text-2xl font-bold text-slate-800 flex items-center gap-2">
           <Settings2 size={22} />설정

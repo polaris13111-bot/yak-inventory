@@ -37,7 +37,7 @@ export default function InboundStatus() {
   const returnCount = items.filter(it => it.type === 'return').length
 
   return (
-    <div className="p-6 space-y-5 overflow-auto h-full">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5 overflow-auto h-full">
 
       {/* 헤더 */}
       <div className="flex items-center justify-between">
@@ -72,7 +72,7 @@ export default function InboundStatus() {
       ) : (
         <>
           {/* 요약 카드 */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-3 md:gap-4">
             {[
               { label: '총 입고 건수', value: `${items.length}건`,  color: 'text-slate-800' },
               { label: '총 입고 수량', value: `${totalQty}개`,      color: 'text-blue-600'  },

@@ -62,7 +62,7 @@ export default function StockStatus() {
   const lowCount   = stock.filter(s => s.current_stock > 0 && s.current_stock <= threshold).length
 
   return (
-    <div className="p-6 space-y-5 overflow-auto h-full">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-5 overflow-auto h-full">
 
       <div className="flex items-center justify-between">
         <div>
@@ -85,7 +85,7 @@ export default function StockStatus() {
       ) : (
         <>
           {/* 요약 카드 */}
-          <div className="grid grid-cols-4 gap-4">
+          <div className="grid grid-cols-2 md:grid-cols-4 gap-3 md:gap-4">
             {[
               { label: '전체 SKU',  value: `${stock.length}종`,               color: 'text-slate-800' },
               { label: '총 재고',   value: `${totalStock.toLocaleString()}개`, color: 'text-blue-600' },

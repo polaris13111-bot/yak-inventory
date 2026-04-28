@@ -251,7 +251,8 @@ function Unauthorized() {
       <Lock size={40} className="text-slate-300" />
       <div>
         <p className="text-lg font-bold text-slate-600">관리자 전용 페이지</p>
-        <p className="text-sm text-slate-400 mt-1">사이드바에서 관리자 모드를 활성화하세요</p>
+        <p className="text-sm text-slate-400 mt-1 hidden md:block">사이드바에서 관리자 모드를 활성화하세요</p>
+        <p className="text-sm text-slate-400 mt-1 md:hidden">하단 탭 오른쪽 모드 버튼에서 전환하세요</p>
       </div>
     </div>
   )

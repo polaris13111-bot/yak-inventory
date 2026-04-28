@@ -142,7 +142,7 @@ export default function StockCalendar() {
         )}
 
         {/* ── 헤더 ── */}
-        <div className="px-6 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
+        <div className="px-3 md:px-6 py-3 bg-white border-b border-slate-200 flex items-center justify-between">
           <div className="flex items-center gap-3">
             <button onClick={() => setMonth(m => Math.max(1, m - 1))}
               className="p-1.5 rounded-lg hover:bg-slate-100 transition-colors">

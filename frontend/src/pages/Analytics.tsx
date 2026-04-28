@@ -137,7 +137,7 @@ export default function Analytics() {
   }
 
   return (
-    <div className="p-6 space-y-6 overflow-auto h-full">
+    <div className="p-3 md:p-6 space-y-4 md:space-y-6 overflow-auto h-full">
 
       {/* 헤더 */}
       <div className="flex items-center justify-between">
@@ -169,7 +169,7 @@ export default function Analytics() {
       ) : (
         <>
           {/* 요약 카드 */}
-          <div className="grid grid-cols-3 gap-4">
+          <div className="grid grid-cols-3 gap-3 md:gap-4">
             <div className="bg-white rounded-xl border border-slate-100 shadow-sm px-5 py-4">
               <p className="text-xs text-slate-400 mb-1">총 출고</p>
               <p className="text-lg font-bold text-blue-600">{totalOutbound}개</p>
@@ -190,10 +190,10 @@ export default function Analytics() {
             ))}
           </div>
 
-          <div className="grid grid-cols-5 gap-4">
+          <div className="grid grid-cols-1 md:grid-cols-5 gap-4">
 
             {/* 가로 막대: 제품명별 */}
-            <div className="col-span-3 bg-white rounded-xl border border-slate-100 shadow-sm p-5">
+            <div className="md:col-span-3 bg-white rounded-xl border border-slate-100 shadow-sm p-5">
               <div className="flex items-center gap-2 mb-4">
                 <BarChart2 size={16} className="text-blue-500" />
                 <h2 className="text-sm font-bold text-slate-700">제품별 출고량</h2>
@@ -219,7 +219,7 @@ export default function Analytics() {
             </div>
 
             {/* 도넛: 드릴다운 */}
-            <div className="col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm p-5 flex flex-col">
+            <div className="md:col-span-2 bg-white rounded-xl border border-slate-100 shadow-sm p-5 flex flex-col">
               {selectedName ? (
                 <>
                   <div className="flex items-center justify-between mb-3">

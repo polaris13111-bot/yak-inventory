@@ -716,7 +716,7 @@ export default function OrderInput() {
   useEffect(() => { getProducts().then(setProducts) }, [])
 
   return (
-    <div className="p-6">
+    <div className="p-3 md:p-6">
       <h1 className="text-2xl font-bold text-slate-800 mb-1">발주 입력</h1>
       <p className="text-sm text-slate-400 mb-5">낱개 또는 대량으로 발주를 등록하세요</p>
 

@@ -417,7 +417,7 @@ export default function History() {
   const totalInQty  = filteredInv.reduce((s, i) => s + i.quantity, 0)
 
   return (
-    <div className="p-6 max-w-6xl space-y-5">
+    <div className="p-3 md:p-6 max-w-6xl space-y-4 md:space-y-5">
       <div>
         <h1 className="text-2xl font-bold text-slate-800">내역 관리</h1>
         <p className="text-sm text-slate-400 mt-1">발주 · 입고 전체 누적 내역 조회 및 수정</p>
