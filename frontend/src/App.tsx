@@ -82,23 +82,41 @@ function PasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
 }
 
 // ─── 모바일 하단 탭 ───────────────────────────────────────
+// 뷰어/관리자 공통 탭 (조회 페이지) — 동일한 구성
+const COMMON_MOBILE_NAV = [
+  { to: '/',          icon: LayoutDashboard, label: '대시보드' },
+  { to: '/calendar',  icon: CalendarDays,    label: '출고' },
+  { to: '/stock',     icon: Boxes,           label: '재고' },
+  { to: '/inbound',   icon: PackageCheck,    label: '입고현황' },
+  { to: '/analytics', icon: BarChart2,       label: '분석' },
+]
+// 관리자 전용 탭 (2번째 줄)
+const ADMIN_MOBILE_NAV = [
+  { to: '/order',     icon: ClipboardList, label: '발주 입력' },
+  { to: '/inventory', icon: PackagePlus,   label: '입고 관리' },
+  { to: '/history',   icon: History,       label: '내역 관리' },
+]
+
 function BottomNav({ onAdminToggle, isAdmin }: { onAdminToggle: () => void; isAdmin: boolean }) {
-  const mobileNav = [
-    { to: '/',          icon: LayoutDashboard, label: '대시보드' },
-    { to: '/calendar',  icon: CalendarDays,    label: '출고' },
-    { to: '/stock',     icon: Boxes,           label: '재고' },
-    ...(isAdmin ? [
-      { to: '/order',     icon: ClipboardList, label: '발주' },
-      { to: '/inventory', icon: PackagePlus,   label: '입고' },
-    ] : [
-      { to: '/inbound',   icon: PackageCheck,  label: '입고현황' },
-      { to: '/analytics', icon: BarChart2,     label: '분석' },
-    ]),
-  ]
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-40 md:hidden">
+      {/* 관리자 전용 2번째 줄 (관리자 모드일 때만) */}
+      {isAdmin && (
+        <div className="flex items-center border-b border-amber-100 bg-amber-50/80">
+          {ADMIN_MOBILE_NAV.map(({ to, icon: Icon, label }) => (
+            <NavLink key={to} to={to}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center py-1.5 gap-0.5 text-[9px] font-medium transition-colors
+                 ${isActive ? 'text-amber-700' : 'text-amber-400 hover:text-amber-600'}`}>
+              <Icon size={16} />
+              {label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+      {/* 공통 1번째 줄 — 뷰어/관리자 동일 */}
       <div className="flex items-center">
-        {mobileNav.map(({ to, icon: Icon, label }) => (
+        {COMMON_MOBILE_NAV.map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} end={to === '/'}
             className={({ isActive }) =>
               `flex-1 flex flex-col items-center py-2 gap-0.5 text-[10px] font-medium transition-colors
@@ -220,8 +238,8 @@ function Layout() {
         </div>
       </aside>
 
-      {/* 메인 콘텐츠 */}
-      <main className="flex-1 overflow-auto pb-16 md:pb-0">
+      {/* 메인 콘텐츠 — 관리자 2줄 탭 높이 고려 */}
+      <main className={`flex-1 overflow-auto md:pb-0 ${isAdmin ? 'pb-24' : 'pb-16'}`}>
         <Routes>
           <Route path="/"          element={<Dashboard />} />
           <Route path="/calendar"  element={<StockCalendar />} />
