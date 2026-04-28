@@ -204,13 +204,24 @@ function BulkForm({
     const firstVal  = firstCols[0].toLowerCase().replace(/\s+/g, '')
 
     const looksLikeDate = !!(firstVal.match(/^\d+\.\d+$/) || firstVal.match(/^\d{4}-\d{2}-\d{2}$/))
-    // 첫 셀이 HEADER_MAP에 매핑될 때만 헤더 행으로 인정 (제품명을 헤더로 오인하지 않도록)
-    const isKnownHeader = !!(HEADER_MAP[firstCols[0].trim()] ?? HEADER_MAP[firstVal])
+    // 첫 셀이 "#" 행번호이거나 빈 값일 수 있으므로 전체 행에서 헤더 키워드 검색
+    const isKnownHeader = firstCols.some(h => {
+      const k = h.toLowerCase().replace(/\s+/g, '')
+      return !!(HEADER_MAP[h.trim()] ?? HEADER_MAP[k] ?? (h.trim() === '색상' || h.trim() === '사이즈'))
+    })
     const isHeader = !looksLikeDate && isKnownHeader
 
     let colMap: (keyof BulkInvRow | null)[]
+    let colorIdx = -1
+    let sizeIdx  = -1
+
     if (isHeader) {
-      colMap = firstCols.map(h => HEADER_MAP[h.trim()] ?? HEADER_MAP[h.toLowerCase().replace(/\s+/g, '')] ?? null)
+      colMap = firstCols.map((h, idx) => {
+        const k = h.toLowerCase().replace(/\s+/g, '')
+        if (h.trim() === '색상' || k === '색상') { colorIdx = idx; return null }
+        if (h.trim() === '사이즈' || k === '사이즈') { sizeIdx = idx; return null }
+        return HEADER_MAP[h.trim()] ?? HEADER_MAP[k] ?? null
+      })
     } else if (looksLikeDate) {
       // 발주 스프레드시트 14열 기본 순서 (발주일 먼저, 상품명=12, 수량=13)
       colMap = [
@@ -254,6 +265,12 @@ function BulkForm({
           }
         }
       })
+      // 발주 테이블에서 색상/사이즈가 분리된 경우 productName에 합산
+      const colorPart = colorIdx >= 0 ? cells[colorIdx] ?? '' : ''
+      const sizePart  = sizeIdx  >= 0 ? cells[sizeIdx]  ?? '' : ''
+      if (colorPart || sizePart) {
+        row.productName = [row.productName, colorPart, sizePart].filter(Boolean).join(' ')
+      }
       return row
     }).filter(r => r.productName)
   }
