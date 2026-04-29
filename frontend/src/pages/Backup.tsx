@@ -28,7 +28,12 @@ export default function BackupPage() {
     fd.append('mode', mode)
 
     try {
-      const res = await fetch('/backup/import', { method: 'POST', body: fd })
+      const token = localStorage.getItem('yak_token')
+      const res = await fetch('/backup/import', {
+        method: 'POST',
+        body: fd,
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
       const json = await res.json()
       if (!res.ok) throw new Error(json.detail || '가져오기 실패')
       setResult(json)
