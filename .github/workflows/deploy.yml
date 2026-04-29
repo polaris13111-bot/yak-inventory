@@ -48,7 +48,7 @@ jobs:
             --cpu 1 \
             --min-instances 1 \
             --max-instances 1 \
-            --set-env-vars DATABASE_URL=sqlite:////data/yak.db \
+            --set-env-vars "DATABASE_URL=sqlite:////data/yak.db,JWT_SECRET=${{ secrets.JWT_SECRET }},ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }},VIEWER_PASSWORD=${{ secrets.VIEWER_PASSWORD }},BACKUP_TOKEN=${{ secrets.BACKUP_TOKEN }}" \
             --add-volume=name=db-vol,type=cloud-storage,bucket=yak-inventory-data \
             --add-volume-mount=volume=db-vol,mount-path=/data \
             --quiet
