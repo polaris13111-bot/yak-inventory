@@ -25,6 +25,7 @@ const VIEWER_NAV = [
   { to: '/stock',     icon: Boxes,           label: '현재고'    },
   { to: '/inbound',   icon: PackageCheck,    label: '입고 현황' },
   { to: '/analytics', icon: BarChart2,       label: '판매 분석' },
+  { to: '/picking',   icon: ListOrdered,     label: '피킹 리스트' },
 ]
 const ADMIN_INPUT_NAV = [
   { to: '/order',     icon: ClipboardList, label: '발주 입력' },
@@ -92,6 +93,10 @@ const COMMON_MOBILE_NAV = [
   { to: '/inbound',   icon: PackageCheck,    label: '입고현황' },
   { to: '/analytics', icon: BarChart2,       label: '분석' },
 ]
+// 뷰어 전용 탭 (2번째 줄 — 피킹만)
+const VIEWER_MOBILE_NAV = [
+  { to: '/picking', icon: ListOrdered, label: '피킹 리스트' },
+]
 // 관리자 전용 탭 (2번째 줄)
 const ADMIN_MOBILE_NAV = [
   { to: '/order',     icon: ClipboardList, label: '발주 입력' },
@@ -100,10 +105,10 @@ const ADMIN_MOBILE_NAV = [
   { to: '/history',   icon: History,       label: '내역 관리' },
 ]
 
-function BottomNav({ onAdminToggle, isAdmin }: { onAdminToggle: () => void; isAdmin: boolean }) {
+function BottomNav({ onAdminToggle, isAdmin, isViewer }: { onAdminToggle: () => void; isAdmin: boolean; isViewer: boolean }) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-40 md:hidden">
-      {/* 관리자 전용 2번째 줄 (관리자 모드일 때만) */}
+      {/* 관리자 전용 2번째 줄 */}
       {isAdmin && (
         <div className="flex items-center border-b border-amber-100 bg-amber-50/80">
           {ADMIN_MOBILE_NAV.map(({ to, icon: Icon, label }) => (
@@ -111,6 +116,20 @@ function BottomNav({ onAdminToggle, isAdmin }: { onAdminToggle: () => void; isAd
               className={({ isActive }) =>
                 `flex-1 flex flex-col items-center py-1.5 gap-0.5 text-[9px] font-medium transition-colors
                  ${isActive ? 'text-amber-700' : 'text-amber-400 hover:text-amber-600'}`}>
+              <Icon size={16} />
+              {label}
+            </NavLink>
+          ))}
+        </div>
+      )}
+      {/* 뷰어 전용 2번째 줄 (피킹 리스트) */}
+      {!isAdmin && isViewer && (
+        <div className="flex items-center border-b border-blue-100 bg-blue-50/60">
+          {VIEWER_MOBILE_NAV.map(({ to, icon: Icon, label }) => (
+            <NavLink key={to} to={to}
+              className={({ isActive }) =>
+                `flex-1 flex flex-col items-center py-1.5 gap-0.5 text-[9px] font-medium transition-colors
+                 ${isActive ? 'text-blue-700' : 'text-blue-400 hover:text-blue-600'}`}>
               <Icon size={16} />
               {label}
             </NavLink>
@@ -261,6 +280,7 @@ function Layout() {
       {/* 모바일 하단 탭 */}
       <BottomNav
         isAdmin={isAdmin}
+        isViewer={isViewer}
         onAdminToggle={() => isAdmin ? logout() : setShowModal(true)}
       />
     </div>

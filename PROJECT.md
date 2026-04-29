@@ -204,6 +204,18 @@ Base URL: `https://<cloud-run-url>` (또는 로컬 `http://localhost:8000`)
 |--------|------|------|------|
 | GET | `/backup/export` | 없음 | 전체 데이터 Excel 내보내기 |
 | POST | `/backup/import` | 관리자 | Excel에서 데이터 가져오기 (append/reset 모드) |
+| POST | `/backup/auto` | `X-Backup-Token` 헤더 | Cloud Scheduler 자동 백업 → `/data/backup/yak_YYYYMMDD_HHMMSS.db` 저장, 30일 초과분 자동 삭제 |
+
+**자동 백업 인증 방식:**  
+`Authorization` 헤더는 Cloud Scheduler 내부에서 override되므로 `X-Backup-Token` 커스텀 헤더 사용.  
+헤더값: `BACKUP_TOKEN` 환경변수 값 (Bearer 접두사 없이 토큰 값만).
+
+```
+Cloud Scheduler → POST /backup/auto
+  Header: X-Backup-Token: bkp-xxxxx
+  → backend에서 x_backup_token == _BACKUP_TOKEN 검증
+  → /tmp/yak.db → /data/backup/yak_YYYYMMDD_HHMMSS.db 복사
+```
 
 ---
 
@@ -324,6 +336,28 @@ Base URL: `https://<cloud-run-url>` (또는 로컬 `http://localhost:8000`)
 **데스크탑 사이드바:**
 - 뷰어: 5개 조회 페이지
 - 관리자: 조회 5개 + 입력 3개(발주/입고/피킹) + 설정·관리 3개
+
+---
+
+## 운영 환경 설정 (Cloud Run)
+
+| 설정 | 값 | 이유 |
+|------|----|------|
+| `min-instances` | 1 | 콜드스타트 방지 |
+| `max-instances` | 1 | SQLite 다중 인스턴스 충돌 방지 |
+| `concurrency` | 1 | SQLite 동시 쓰기 race condition 방지 |
+| `memory` | 512Mi | |
+| `cpu` | 1 | |
+
+**GitHub Secrets (CI/CD 배포 시 Cloud Run env로 주입):**
+
+| Secret 이름 | 설명 |
+|-------------|------|
+| `JWT_SECRET` | JWT 서명 키 |
+| `ADMIN_PASSWORD` | 관리자 비밀번호 |
+| `VIEWER_PASSWORD` | 뷰어 비밀번호 |
+| `BACKUP_TOKEN` | 자동 백업 인증 토큰 |
+| `WIF_PROVIDER` | Workload Identity Federation 프로바이더 |
 
 ---
 

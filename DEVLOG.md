@@ -45,12 +45,14 @@ GitHub main push
 
 | 모드 | 비밀번호 | 접근 가능 페이지 |
 |------|----------|-----------------|
-| **뷰어** | `blackyak` | 대시보드, 출고 현황, 판매 분석 |
-| **관리자** | `newface` | 전체 (내역 관리, 발주 입력, 입고 관리, 상품목록 포함) |
+| **뷰어** | `blackyak` (env: `VIEWER_PASSWORD`) | 대시보드, 출고현황, 재고, 입고현황, 분석, 피킹 리스트 |
+| **관리자** | `newface` (env: `ADMIN_PASSWORD`) | 전체 (발주 입력, 입고 관리, 피킹 리스트, 내역 관리, 상품목록, 백업) |
 
-- 시작 화면에서 모드 선택 후 비밀번호 입력
-- 사이드바에서 모드 전환 가능 (관리자 → 뷰어는 버튼, 뷰어 → 관리자는 비밀번호 필요)
-- `sessionStorage`로 세션 유지 (탭 닫으면 초기화)
+**JWT 기반 인증 (2026-04 도입):**
+- 로그인 시 `/auth/login` → JWT 액세스 토큰 발급 (24시간 유효)
+- 토큰은 `localStorage`(`yak_token`, `yak_role`)에 저장 — 페이지 새로고침 후에도 유지
+- 모든 API 요청에 `Authorization: Bearer <token>` 헤더 자동 첨부 (axios 인터셉터)
+- 401 응답 시 토큰 자동 삭제 → 로그인 화면으로
 
 ---
 
@@ -98,6 +100,20 @@ GitHub main push
 
 ### 상품목록 (`/settings`) — 관리자
 - 상품 CRUD (이름/색상/사이즈/모델코드)
+- 매핑 규칙 관리 (키워드 AND/OR 매핑, 활성/비활성)
+
+### 피킹 리스트 (`/picking`) — 뷰어/관리자
+- 날짜 선택 → 해당일 발주를 **제품별 합산** 표시
+- 창고 작업자용 인쇄 최적화 (`window.print()`)
+- 인쇄 시 체크박스 열 표시, 불필요 UI 숨김
+- 상세 발주 내역 (수령인, 연락처, 판매몰)
+
+### 발주 입력 (`/order`) — 관리자 (바코드 모드 추가)
+- **바코드 탭**: USB 스캐너 연동
+  - 스캔 전용 input에 포커스 → 스캐너 Enter → `model_code` 매칭
+  - 매칭 성공 시 수량 +1 누적 (동일 상품 재스캔 시 합산)
+  - 스캔 목록에서 수량 조정/삭제 후 일괄 등록
+  - ※ 동작하려면 Settings에서 상품마다 `model_code` 등록 필요
 
 ---
 
@@ -306,6 +322,10 @@ VITE_API_URL="" npx vite build   # 실제 번들 빌드 테스트
 | GET/POST/PUT/DELETE | `/mapping-rules/...` | 매핑 규칙 CRUD |
 | POST | `/mapping-rules/resolve` | 상품명 텍스트 → product_id 자동 해석 |
 | POST | `/mapping-rules/seed-defaults` | 기본 매핑 규칙 자동 생성 |
+| POST | `/auth/login` | `{password}` → `{token, role}` JWT 발급 |
+| GET | `/backup/export` | 전체 데이터 Excel 내보내기 |
+| POST | `/backup/import` | Excel에서 데이터 가져오기 |
+| POST | `/backup/auto` | Cloud Scheduler 자동 백업 (X-Backup-Token 헤더) |
 
 ---
 
@@ -317,6 +337,10 @@ VITE_API_URL="" npx vite build   # 실제 번들 빌드 테스트
 | `DATABASE_URL` | `sqlite:///./yak.db` | 로컬 기본값 |
 | `VITE_API_URL` | `""` (빈 문자열) | 프로덕션 빌드 시 상대 경로 사용 |
 | `VITE_API_URL` | `http://localhost:8000` | 로컬 개발 (.env.local) |
+| `JWT_SECRET` | (복잡한 문자열) | JWT 서명 키 — GitHub Secret으로 관리 |
+| `ADMIN_PASSWORD` | `newface` | 관리자 비밀번호 — GitHub Secret으로 관리 |
+| `VIEWER_PASSWORD` | `blackyak` | 뷰어 비밀번호 — GitHub Secret으로 관리 |
+| `BACKUP_TOKEN` | `bkp-xxxxx` | 자동 백업 인증 토큰 — GitHub Secret으로 관리 |
 
 ---
 
@@ -348,4 +372,37 @@ claude mcp add github -s user \
 
 ---
 
-*마지막 업데이트: 2026-04-22 (이슈 #10 GCS FUSE stale read 근본 해결)*
+---
+
+## 주요 해결 이슈 (계속)
+
+### 11. JWT 인증 도입 (2026-04)
+- `/auth/login` 엔드포인트 추가, `python-jose` 기반 JWT (24h 유효)
+- 뷰어/관리자 권한 분리, `localStorage` 토큰 저장으로 새로고침 후에도 유지
+- axios 인터셉터로 모든 요청에 자동 첨부, 401 시 자동 로그아웃
+
+### 12. 날짜 형식 통일 M.DD → YYYY-MM-DD (2026-04)
+- 기존 데이터: `_migrate_dates()` 앱 시작 시 자동 변환
+- API `month` 파라미터: `YYYY-MM` 형식으로 통일 (예: `?month=2026-04`)
+- 프론트엔드 전체: `dayjs().format('YYYY-MM-DD')` / `dayjs().format('YYYY-MM')` 통일
+
+### 13. Cloud Scheduler 자동 백업 401 문제 (2026-04)
+**현상**: Cloud Scheduler에서 `/backup/auto` 호출 시 401 — 직접 curl은 성공  
+**원인**: Cloud Scheduler가 `Authorization` 헤더를 내부적으로 사용/override함  
+**해결**: 백업 엔드포인트를 `X-Backup-Token` 커스텀 헤더로 변경  
+```python
+# 변경 전 (실패)
+def backup_auto(authorization: Optional[str] = Header(None)):
+    if authorization != f'Bearer {_BACKUP_TOKEN}': ...
+
+# 변경 후 (성공)
+def backup_auto(x_backup_token: Optional[str] = Header(None)):
+    if x_backup_token != _BACKUP_TOKEN: ...
+```
+Cloud Scheduler 설정도 헤더명 `Authorization` → `X-Backup-Token`, 값에서 `Bearer ` 접두사 제거
+
+### 14. Cloud Run max-instances=1, concurrency=1 설정 (2026-04)
+SQLite 다중 인스턴스 race condition 근본 방지.  
+Cloud Run 콘솔에서 직접 설정 (GitHub Actions deploy.yml에는 미반영 — 콘솔 설정이 우선).
+
+*마지막 업데이트: 2026-04-29 (Cloud Scheduler 백업 정상 운영 확인)*

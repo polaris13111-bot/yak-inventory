@@ -47,11 +47,15 @@ def _require_admin(role: str = Depends(_verify_token)) -> str:
 
 init_db()
 with ENGINE.connect() as _conn:
-    try:
-        _conn.execute(text('ALTER TABLE products ADD COLUMN active INTEGER DEFAULT 1'))
-        _conn.commit()
-    except Exception:
-        pass  # column already exists
+    for _stmt in [
+        'ALTER TABLE products ADD COLUMN active INTEGER DEFAULT 1',
+        "ALTER TABLE products ADD COLUMN barcode TEXT DEFAULT ''",
+    ]:
+        try:
+            _conn.execute(text(_stmt))
+            _conn.commit()
+        except Exception:
+            pass  # column already exists
 SessionLocal = sessionmaker(bind=ENGINE)
 
 # ── 날짜 자동 마이그레이션: M.DD → YYYY-MM-DD ────────────
@@ -150,6 +154,7 @@ class ProductIn(BaseModel):
     color: str
     size: str
     model_code: str = ''
+    barcode: str = ''
 
 class ProductOut(BaseModel):
     id: int
@@ -157,6 +162,7 @@ class ProductOut(BaseModel):
     color: str
     size: str
     model_code: str
+    barcode: str = ''
     active: bool = True
     model_config = {'from_attributes': True}
 
@@ -291,6 +297,7 @@ def update_product(product_id: int, data: ProductIn, db: Session = Depends(get_d
     p.color = data.color
     p.size = data.size
     p.model_code = data.model_code
+    p.barcode = data.barcode
     db.commit()
     db.refresh(p)
     return p
@@ -707,9 +714,9 @@ def backup_export(db: Session = Depends(get_db)):
 
     ws_p = wb.active
     ws_p.title = 'products'
-    ws_p.append(['id', 'name', 'color', 'size', 'model_code'])
+    ws_p.append(['id', 'name', 'color', 'size', 'model_code', 'barcode'])
     for p in db.query(Product).order_by(Product.id).all():
-        ws_p.append([p.id, p.name, p.color, p.size, p.model_code or ''])
+        ws_p.append([p.id, p.name, p.color, p.size, p.model_code or '', p.barcode or ''])
 
     ws_o = wb.create_sheet('orders')
     ws_o.append(['id', 'date', 'product_id', 'quantity', 'order_date',

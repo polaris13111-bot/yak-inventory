@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
-import { CheckCircle, ChevronDown, Upload, ClipboardPaste, Trash2, AlertCircle, HelpCircle, LayoutGrid } from 'lucide-react'
+import { CheckCircle, ChevronDown, Upload, ClipboardPaste, Trash2, AlertCircle, HelpCircle, LayoutGrid, Download } from 'lucide-react'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { getProducts, createOrder, createOrdersBulk, getOrders } from '../api'
@@ -350,6 +350,46 @@ function GridOrderForm({ products }: { products: Product[] }) {
   )
 }
 
+// ─── 발주 등록 표준 양식 다운로드 ────────────────────────────
+function downloadOrderTemplate() {
+  const wb = XLSX.utils.book_new()
+
+  const guide = [
+    ['야크 재고관리 — 발주 등록 표준 양식 가이드'],
+    [],
+    ['열 이름', '필수', '형식 / 예시', '설명'],
+    ['발주일자', '필수', 'YYYY-MM-DD  예) 2026-04-29', '물건이 출고된 날짜'],
+    ['주문일자', '선택', 'YYYY-MM-DD  예) 2026-04-28', '주문이 들어온 날짜 (없으면 발주일자와 동일)'],
+    ['제품보관', '선택', '뉴페이스', '창고명 (기본값: 뉴페이스)'],
+    ['매출MALL', '선택', '스마트스토어 / 쿠팡 / 해솔앤코 등', '판매 채널'],
+    ['주문자명', '선택', '홍길동', '주문한 사람 이름'],
+    ['수령인',   '선택', '홍길동', '받는 사람 이름'],
+    ['수령인휴대폰', '선택', '010-1234-5678', '수령인 연락처'],
+    ['주소', '선택', '서울시 강남구 테헤란로 1', '배송 주소'],
+    ['배송메모', '선택', '문 앞에 놔주세요', '배송 요청사항'],
+    ['상품명',  '필수', 'H티아고 자켓 블랙 95', '상품명 (색상·사이즈 같이 쓰면 더 정확히 매칭)'],
+    ['수량',    '필수', '1', '출고 수량 (숫자만)'],
+    [],
+    ['주의사항'],
+    ['1. 날짜는 반드시 YYYY-MM-DD 형식으로 입력 (예: 2026-04-29)'],
+    ['2. 상품명이 정확하지 않아도 자동 매칭됩니다 (색상, 사이즈 함께 입력 권장)'],
+    ['3. 헤더 행 포함해서 붙여넣어도 자동으로 건너뜁니다'],
+    ['4. 두 번째 시트 "발주양식"에 데이터를 입력하세요'],
+  ]
+  const wsGuide = XLSX.utils.aoa_to_sheet(guide)
+  wsGuide['!cols'] = [{ wch: 14 }, { wch: 6 }, { wch: 32 }, { wch: 32 }]
+  XLSX.utils.book_append_sheet(wb, wsGuide, '가이드라인')
+
+  const today = dayjs().format('YYYY-MM-DD')
+  const headers = ['발주일자', '주문일자', '제품보관', '매출MALL', '주문자명', '수령인', '수령인휴대폰', '주소', '배송메모', '상품명', '수량']
+  const example = [today, today, '뉴페이스', '스마트스토어', '홍길동', '홍길동', '010-1234-5678', '서울시 강남구 테헤란로 1', '문 앞에 놔주세요', 'H티아고 자켓 블랙 95', '1']
+  const wsForm = XLSX.utils.aoa_to_sheet([headers, example])
+  wsForm['!cols'] = headers.map(() => ({ wch: 18 }))
+  XLSX.utils.book_append_sheet(wb, wsForm, '발주양식')
+
+  XLSX.writeFile(wb, `발주등록_표준양식_${today}.xlsx`)
+}
+
 // ─── 대량 입력 ────────────────────────────────────────────
 function BulkForm({ products }: { products: Product[] }) {
   const [subMode, setSubMode]   = useState<'paste' | 'file' | 'grid'>('paste')
@@ -610,7 +650,7 @@ function BulkForm({ products }: { products: Product[] }) {
     <div className="space-y-4">
 
       {/* 대량 입력 서브 모드 */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         <button onClick={() => setSubMode('paste')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${subMode === 'paste' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
@@ -625,6 +665,11 @@ function BulkForm({ products }: { products: Product[] }) {
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${subMode === 'grid' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
           <LayoutGrid size={15} />그리드 입력
+        </button>
+        <button onClick={downloadOrderTemplate}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+            bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-50 ml-auto">
+          <Download size={15} />표준 양식
         </button>
       </div>
 
@@ -907,11 +952,14 @@ function BarcodeForm({ products }: { products: Product[] }) {
   const [submitting, setSubmitting] = useState(false)
   const [result, setResult] = useState<string | null>(null)
 
-  // model_code → product 맵
+  // barcode → product 맵 (barcode 우선, 없으면 model_code fallback)
   const codeMap = useMemo(() => {
     const m: Record<string, Product> = {}
     for (const p of products) {
       if (p.model_code) m[p.model_code.trim().toUpperCase()] = p
+    }
+    for (const p of products) {
+      if (p.barcode) m[p.barcode.trim().toUpperCase()] = p  // barcode가 우선
     }
     return m
   }, [products])
@@ -920,7 +968,7 @@ function BarcodeForm({ products }: { products: Product[] }) {
     const key = code.trim().toUpperCase()
     const product = codeMap[key]
     if (!product) {
-      setLastScan({ product: { id: -1, name: code, color: '', size: '', model_code: code, active: false }, ok: false })
+      setLastScan({ product: { id: -1, name: code, color: '', size: '', model_code: code, barcode: '', active: false }, ok: false })
       return
     }
     setLastScan({ product, ok: true })

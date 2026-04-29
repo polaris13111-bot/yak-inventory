@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
-import { PackagePlus, RotateCcw, CheckCircle, ChevronDown, ClipboardPaste, Upload, Trash2, AlertCircle, Pencil, X, Check, LayoutGrid, AlertOctagon } from 'lucide-react'
+import { PackagePlus, RotateCcw, CheckCircle, ChevronDown, ClipboardPaste, Upload, Trash2, AlertCircle, Pencil, X, Check, LayoutGrid, AlertOctagon, Download } from 'lucide-react'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { getProducts, getInventory, createInventory, createInventoryBulk, updateInventory, deleteInventory } from '../api'
@@ -323,6 +323,43 @@ function GridInvForm({ products, onAdded }: { products: Product[]; onAdded: () =
   )
 }
 
+// ─── 입고 등록 표준 양식 다운로드 ────────────────────────────
+function downloadInventoryTemplate() {
+  const wb = XLSX.utils.book_new()
+
+  const guide = [
+    ['야크 재고관리 — 입고 등록 표준 양식 가이드'],
+    [],
+    ['열 이름', '필수', '형식 / 예시', '설명'],
+    ['상품명',  '필수', 'H티아고 자켓 블랙 95', '상품명 (색상·사이즈 함께 입력 권장)'],
+    ['수량',    '필수', '10', '입고 수량 (숫자만)'],
+    ['날짜',    '선택', 'YYYY-MM-DD  예) 2026-04-29', '입고일 (없으면 오늘 날짜로 처리)'],
+    ['메모',    '선택', '4월 정기입고', '참고용 메모'],
+    [],
+    ['입고 유형 (대량 입력 시 공통 적용)'],
+    ['정상 입고',     '일반적인 입고 — 재고에 합산됨'],
+    ['변심반품 입고', '반품 후 재판매 가능한 물건 — 재고에 합산됨'],
+    ['불량 입고',     '불량·파손품 — 재고에 포함되지 않음 (별도 보관)'],
+    [],
+    ['주의사항'],
+    ['1. 날짜는 YYYY-MM-DD 형식으로 입력 (예: 2026-04-29), 생략 시 오늘 날짜 자동 적용'],
+    ['2. 상품명이 정확하지 않아도 자동 매칭됩니다'],
+    ['3. 두 번째 시트 "입고양식"에 데이터를 입력하세요'],
+  ]
+  const wsGuide = XLSX.utils.aoa_to_sheet(guide)
+  wsGuide['!cols'] = [{ wch: 14 }, { wch: 6 }, { wch: 32 }, { wch: 32 }]
+  XLSX.utils.book_append_sheet(wb, wsGuide, '가이드라인')
+
+  const today = dayjs().format('YYYY-MM-DD')
+  const headers = ['상품명', '수량', '날짜', '메모']
+  const example = ['H티아고 자켓 블랙 95', '10', today, '4월 정기입고']
+  const wsForm = XLSX.utils.aoa_to_sheet([headers, example])
+  wsForm['!cols'] = [{ wch: 30 }, { wch: 10 }, { wch: 16 }, { wch: 24 }]
+  XLSX.utils.book_append_sheet(wb, wsForm, '입고양식')
+
+  XLSX.writeFile(wb, `입고등록_표준양식_${today}.xlsx`)
+}
+
 // ─── 대량 입력 폼 ─────────────────────────────────────────
 function BulkForm({
   products,
@@ -532,7 +569,7 @@ function BulkForm({
   return (
     <div className="space-y-4">
       {/* 서브모드 탭 */}
-      <div className="flex gap-2 flex-wrap">
+      <div className="flex gap-2 flex-wrap items-center">
         <button onClick={() => setSubMode('paste')}
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${subMode === 'paste' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
@@ -542,6 +579,11 @@ function BulkForm({
           className={`flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
             ${subMode === 'file' ? 'bg-blue-600 text-white' : 'bg-white text-slate-600 border border-slate-200'}`}>
           <Upload size={15} />파일 업로드
+        </button>
+        <button onClick={downloadInventoryTemplate}
+          className="flex items-center gap-2 px-4 py-2 rounded-lg text-sm font-medium transition-colors
+            bg-white text-emerald-600 border border-emerald-200 hover:bg-emerald-50 ml-auto">
+          <Download size={15} />표준 양식
         </button>
       </div>
 

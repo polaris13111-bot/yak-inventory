@@ -4,6 +4,7 @@ export interface Product {
   color: string
   size: string
   model_code: string
+  barcode: string
   active: boolean
 }
 

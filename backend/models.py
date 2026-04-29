@@ -52,6 +52,7 @@ class Product(Base):
     color      = Column(String, nullable=False)
     size       = Column(String, nullable=False)
     model_code = Column(String, default='')
+    barcode    = Column(String, default='')
     active     = Column(Boolean, default=True)
     orders     = relationship('Order', back_populates='product')
     inventories = relationship('InventoryItem', back_populates='product')

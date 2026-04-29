@@ -9,6 +9,7 @@ interface ProductForm {
   color: string
   size: string
   model_code: string
+  barcode: string
 }
 
 function ProductModal({
@@ -25,6 +26,7 @@ function ProductModal({
     color:      initial?.color      ?? '',
     size:       initial?.size       ?? '',
     model_code: initial?.model_code ?? '',
+    barcode:    initial?.barcode    ?? '',
   })
   const [saving, setSaving] = useState(false)
   const [error, setError]   = useState('')
@@ -74,6 +76,7 @@ function ProductModal({
           {field('사이즈', 'size', '예) 95', true)}
         </div>
         {field('모델코드', 'model_code', '예) 8BYAJF3904 (선택)')}
+        {field('바코드', 'barcode', '스캐너로 찍거나 직접 입력 (선택)')}
 
         {error && <p className="text-xs text-red-500">{error}</p>}
 
@@ -221,6 +224,11 @@ function ProductsTab() {
                           {p.model_code && (
                             <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-500 rounded font-mono">
                               {p.model_code}
+                            </span>
+                          )}
+                          {p.barcode && (
+                            <span className="text-xs px-2 py-0.5 bg-green-50 text-green-600 rounded font-mono">
+                              📷 {p.barcode}
                             </span>
                           )}
                           {!p.active && (
