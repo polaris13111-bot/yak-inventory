@@ -25,6 +25,7 @@ _JWT_ALG     = 'HS256'
 _TOKEN_EXP_H = 24  # 토큰 유효시간 (시간)
 _ADMIN_PW    = os.getenv('ADMIN_PASSWORD',  'newface')
 _VIEWER_PW   = os.getenv('VIEWER_PASSWORD', 'blackyak')
+_BACKUP_TOKEN = os.getenv('BACKUP_TOKEN', '')  # Cloud Scheduler 전용 토큰
 
 def _create_token(role: str) -> str:
     exp = datetime.utcnow() + timedelta(hours=_TOKEN_EXP_H)
@@ -661,6 +662,42 @@ def seed_default_rules(db: Session = Depends(get_db), _: str = Depends(_require_
 
 
 # ─── 백업 / 복원 ─────────────────────────────────────────────
+
+@app.post('/backup/auto')
+def backup_auto(authorization: Optional[str] = Header(None)):
+    """
+    Cloud Scheduler가 매일 새벽 호출 → /data/backup/ 폴더에 날짜별 DB 스냅샷 저장.
+    BACKUP_TOKEN 환경변수로 인증 (일반 JWT와 별도).
+    """
+    # 토큰 검증
+    if not _BACKUP_TOKEN:
+        raise HTTPException(503, 'BACKUP_TOKEN 환경변수가 설정되지 않았습니다')
+    if not authorization or authorization != f'Bearer {_BACKUP_TOKEN}':
+        raise HTTPException(401, '백업 토큰이 유효하지 않습니다')
+
+    src = Path('/tmp/yak.db')
+    if not src.exists():
+        raise HTTPException(503, '/tmp/yak.db 파일이 없습니다')
+
+    backup_dir = Path('/data/backup')
+    try:
+        backup_dir.mkdir(parents=True, exist_ok=True)
+        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
+        dst = backup_dir / f'yak_{stamp}.db'
+        shutil.copy2(str(src), str(dst))
+
+        # 30일 이상 된 백업 자동 삭제
+        cutoff = datetime.now().timestamp() - 30 * 86400
+        removed = 0
+        for old in backup_dir.glob('yak_*.db'):
+            if old.stat().st_mtime < cutoff:
+                old.unlink()
+                removed += 1
+
+        return {'ok': True, 'saved': str(dst), 'removed_old': removed}
+    except Exception as e:
+        raise HTTPException(500, f'백업 실패: {e}')
+
 
 @app.get('/backup/export')
 def backup_export(db: Session = Depends(get_db)):
