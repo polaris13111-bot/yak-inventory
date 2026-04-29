@@ -145,6 +145,7 @@ function BottomNav({ onAdminToggle, isAdmin, isViewer }: { onAdminToggle: () => 
 function Layout() {
   const { isAdmin, isViewer, logout } = useAdmin()
   const [showModal, setShowModal] = useState(false)
+  const config = useAppConfig()
 
   return (
     <div className="flex h-screen bg-slate-50">
@@ -159,10 +160,10 @@ function Layout() {
             <span className="text-2xl">🏔️</span>
             <div>
               <p className="font-bold text-slate-800 text-sm leading-tight">
-                {import.meta.env.VITE_APP_NAME || '야크 재고관리'}
+                {config.name}
               </p>
               <p className="text-xs text-slate-400">
-                {import.meta.env.VITE_APP_SUB || '블랙야크 위탁판매'}
+                {config.sub}
               </p>
             </div>
           </div>
@@ -248,7 +249,7 @@ function Layout() {
 
         <div className="px-3 py-3 border-t border-slate-100">
           <p className="text-xs text-slate-400 px-3 pt-1">
-            {import.meta.env.VITE_APP_SUB || '뉴페이스'} © 2026
+            {config.sub || '뉴페이스'} © 2026
           </p>
         </div>
       </aside>
@@ -346,6 +347,7 @@ function PwForm({ onSubmit, color, pw, setPw, error, onBack, inputRef }: PwFormP
 
 // ─── 시작 화면 ────────────────────────────────────────────
 function EntryScreen({ onEnter }: { onEnter: () => void }) {
+  const config = useAppConfig()
   const [step, setStep]   = useState<'select' | 'viewer-pw' | 'admin-pw'>('select')
   const [pw, setPw]       = useState('')
   const [error, setError] = useState(false)
@@ -375,11 +377,9 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="text-center space-y-1">
           <div className="text-5xl mb-3">🏔️</div>
-          <h1 className="text-2xl font-bold text-slate-800">
-            {import.meta.env.VITE_APP_NAME || '야크 재고관리'}
-          </h1>
+          <h1 className="text-2xl font-bold text-slate-800">{config.name}</h1>
           <p className="text-sm text-slate-400">
-            {import.meta.env.VITE_APP_SUB || '블랙야크 위탁판매'} 관리 시스템
+            {config.sub ? `${config.sub} ` : ''}관리 시스템
           </p>
         </div>
 
@@ -431,6 +431,23 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
 }
 
 const SKIP_AUTH = import.meta.env.VITE_SKIP_AUTH === 'true'
+
+// 런타임 앱 이름 (백엔드 /config 에서 가져옴)
+export const AppConfig = {
+  name: import.meta.env.VITE_APP_NAME || '재고관리',
+  sub:  import.meta.env.VITE_APP_SUB  || '',
+}
+
+export function useAppConfig() {
+  const [config, setConfig] = useState(AppConfig)
+  useEffect(() => {
+    fetch('/config')
+      .then(r => r.json())
+      .then(d => setConfig({ name: d.app_name, sub: d.app_sub }))
+      .catch(() => {}) // 실패 시 빌드 기본값 유지
+  }, [])
+  return config
+}
 
 function AppInner() {
   const [entered, setEntered] = useState(() =>
