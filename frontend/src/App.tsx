@@ -98,38 +98,13 @@ const COMMON_MOBILE_NAV = [
   { to: '/inbound',   icon: PackageCheck,    label: '입고현황' },
   { to: '/analytics', icon: BarChart2,       label: '분석'     },
 ]
-// 관리자 2번째 줄 (작업)
-const ADMIN_MOBILE_NAV = [
-  { to: '/order',     icon: ClipboardList, label: '발주' },
-  { to: '/inventory', icon: PackagePlus,   label: '입고' },
-  { to: '/picking',   icon: ListOrdered,   label: '피킹' },
-  { to: '/history',   icon: History,       label: '내역' },
-]
 
 function BottomNav({ onAdminToggle, isAdmin, isViewer }: { onAdminToggle: () => void; isAdmin: boolean; isViewer: boolean }) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-40 md:hidden">
 
-      {/* 관리자 작업 탭 (2번째 줄 — 주황) */}
-      {isAdmin && (
-        <div className="flex border-b border-amber-100 bg-gradient-to-r from-amber-50 to-orange-50">
-          <div className="flex-shrink-0 flex items-center px-2">
-            <span className="text-[8px] font-bold text-amber-400 uppercase tracking-wider">작업</span>
-          </div>
-          {ADMIN_MOBILE_NAV.map(({ to, icon: Icon, label }) => (
-            <NavLink key={to} to={to}
-              className={({ isActive }) =>
-                `flex-1 flex flex-col items-center py-1.5 gap-0.5 text-[9px] font-medium transition-colors
-                 ${isActive ? 'text-amber-700 font-semibold' : 'text-amber-400 hover:text-amber-600'}`}>
-              <Icon size={15} />
-              {label}
-            </NavLink>
-          ))}
-        </div>
-      )}
-
-      {/* 뷰어 작업 탭 (2번째 줄 — 파란 인라인 배너) */}
-      {!isAdmin && isViewer && (
+      {/* 피킹 리스트 배너 — 뷰어/관리자 공통 2번째 줄 */}
+      {(isAdmin || isViewer) && (
         <NavLink to="/picking"
           className={({ isActive }) =>
             `flex items-center justify-center gap-2 py-2 border-b text-xs font-medium transition-colors
