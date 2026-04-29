@@ -87,39 +87,39 @@ jobs:
             --quiet
 
 
-  # ── 고객사 B 추가 예시 (주석 해제 후 사용) ──────────────────
-  # deploy-clientb:
-  #   needs: build
-  #   runs-on: ubuntu-latest
-  #   permissions:
-  #     contents: read
-  #     id-token: write
-  #   env:
-  #     SERVICE: clientb-inventory          # Cloud Run 서비스 이름
-  #     BUCKET: clientb-inventory-data      # GCS 버킷 이름
-  #
-  #   steps:
-  #     - uses: actions/checkout@v4
-  #
-  #     - name: Authenticate to GCP
-  #       uses: google-github-actions/auth@v2
-  #       with:
-  #         workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
-  #         service_account: github-deploy@blackyak-493519.iam.gserviceaccount.com
-  #
-  #     - name: Deploy to Cloud Run (고객사B)
-  #       run: |
-  #         gcloud run deploy ${{ env.SERVICE }} \
-  #           --image ${{ env.IMAGE }}:${{ github.sha }} \
-  #           --region ${{ env.REGION }} \
-  #           --platform managed \
-  #           --allow-unauthenticated \
-  #           --port 8080 \
-  #           --memory 512Mi \
-  #           --cpu 1 \
-  #           --min-instances 1 \
-  #           --max-instances 1 \
-  #           --set-env-vars "DATABASE_URL=sqlite:////data/yak.db,JWT_SECRET=${{ secrets.CLIENTB_JWT_SECRET }},ADMIN_PASSWORD=${{ secrets.CLIENTB_ADMIN_PASSWORD }},VIEWER_PASSWORD=${{ secrets.CLIENTB_VIEWER_PASSWORD }},BACKUP_TOKEN=${{ secrets.CLIENTB_BACKUP_TOKEN }}" \
-  #           --add-volume=name=db-vol,type=cloud-storage,bucket=${{ env.BUCKET }} \
-  #           --add-volume-mount=volume=db-vol,mount-path=/data \
-  #           --quiet
+  # ── 자사 사내 창고 ───────────────────────────────────────────
+  deploy-warehouse:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SERVICE: warehouse-inventory
+      BUCKET: warehouse-inventory-data
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: github-deploy@blackyak-493519.iam.gserviceaccount.com
+
+      - name: Deploy to Cloud Run (사내 창고)
+        run: |
+          gcloud run deploy ${{ env.SERVICE }} \
+            --image ${{ env.IMAGE }}:${{ github.sha }} \
+            --region ${{ env.REGION }} \
+            --platform managed \
+            --allow-unauthenticated \
+            --port 8080 \
+            --memory 512Mi \
+            --cpu 1 \
+            --min-instances 1 \
+            --max-instances 1 \
+            --set-env-vars "DATABASE_URL=sqlite:////data/yak.db,JWT_SECRET=${{ secrets.WAREHOUSE_JWT_SECRET }},ADMIN_PASSWORD=${{ secrets.WAREHOUSE_ADMIN_PASSWORD }},VIEWER_PASSWORD=${{ secrets.WAREHOUSE_VIEWER_PASSWORD }},BACKUP_TOKEN=${{ secrets.WAREHOUSE_BACKUP_TOKEN }},TOKEN_EXPIRE_HOURS=87600" \
+            --add-volume=name=db-vol,type=cloud-storage,bucket=${{ env.BUCKET }} \
+            --add-volume-mount=volume=db-vol,mount-path=/data \
+            --quiet
