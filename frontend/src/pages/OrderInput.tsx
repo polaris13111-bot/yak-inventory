@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
+import ConcurrentWarning from '../components/ConcurrentWarning'
 import { CheckCircle, ChevronDown, Upload, ClipboardPaste, Trash2, AlertCircle, HelpCircle, LayoutGrid, Download } from 'lucide-react'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
@@ -1140,7 +1141,10 @@ export default function OrderInput() {
 
   return (
     <div className="p-3 md:p-6">
-      <h1 className="text-2xl font-bold text-slate-800 mb-1">발주 입력</h1>
+      <div className="flex items-center gap-2 mb-1">
+        <h1 className="text-2xl font-bold text-slate-800">발주 입력</h1>
+        <ConcurrentWarning />
+      </div>
       <p className="text-sm text-slate-400 mb-5">낱개 또는 대량으로 발주를 등록하세요</p>
 
       {/* 모드 탭 */}

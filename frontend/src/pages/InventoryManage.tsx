@@ -1,5 +1,6 @@
 import { useState, useEffect, useRef, useMemo, Fragment } from 'react'
 import { PackagePlus, RotateCcw, CheckCircle, ChevronDown, ClipboardPaste, Upload, Trash2, AlertCircle, Pencil, X, Check, LayoutGrid, AlertOctagon, Download } from 'lucide-react'
+import ConcurrentWarning from '../components/ConcurrentWarning'
 import dayjs from 'dayjs'
 import * as XLSX from 'xlsx'
 import { getProducts, getInventory, createInventory, createInventoryBulk, updateInventory, deleteInventory } from '../api'
@@ -870,7 +871,10 @@ export default function InventoryManage() {
   return (
     <div className="p-3 md:p-6 max-w-4xl space-y-4 md:space-y-6">
       <div>
-        <h1 className="text-2xl font-bold text-slate-800">입고 관리</h1>
+        <div className="flex items-center gap-2">
+          <h1 className="text-2xl font-bold text-slate-800">입고 관리</h1>
+          <ConcurrentWarning />
+        </div>
         <p className="text-sm text-slate-400 mt-1">정상 입고와 반품 입고를 구분하여 등록하세요</p>
       </div>
 
