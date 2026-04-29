@@ -41,7 +41,7 @@ def _set_sqlite_pragmas(conn, _):
 
 class InventoryType(str, enum.Enum):
     normal    = 'normal'     # 정상 입고
-    ret       = 'return'     # 변심반품 입고
+    returned  = 'return'     # 변심반품 입고
     defective = 'defective'  # 불량 입고 (현재고 제외)
 
 

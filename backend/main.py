@@ -11,7 +11,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy import func, text
+from sqlalchemy import func, text, delete as sa_delete
 from pydantic import BaseModel
 from typing import Optional
 from openpyxl import Workbook, load_workbook
@@ -65,6 +65,13 @@ def _migrate_dates():
     """기존 M.DD 형식 날짜를 YYYY-MM-DD 로 일괄 변환 (앱 시작 시 1회)."""
     db = SessionLocal()
     try:
+        # 구 형식(M.DD) 날짜가 없으면 즉시 종료 — 정상 운영 중엔 매번 스킵
+        has_old = (
+            db.query(Order).filter(Order.date.like('%.%')).first() is not None or
+            db.query(InventoryItem).filter(InventoryItem.date.like('%.%')).first() is not None
+        )
+        if not has_old:
+            return
         year = datetime.now().year
         changed = 0
         for model in (Order, InventoryItem):
@@ -124,10 +131,12 @@ _migrate_dates()
 app = FastAPI(title='야크 재고관리 API')
 
 # ── GCS 동기화 미들웨어: POST/PUT/DELETE 완료 후 동기 sync ──
+_NO_SYNC_PATHS = {'/auth/login', '/backup/auto', '/backup/export'}
+
 @app.middleware('http')
 async def _gcs_sync_middleware(request: Request, call_next):
     response = await call_next(request)
-    if request.method in ('POST', 'PUT', 'DELETE', 'PATCH'):
+    if request.method in ('POST', 'PUT', 'DELETE', 'PATCH') and request.url.path not in _NO_SYNC_PATHS:
         await asyncio.to_thread(_sync_db)
     return response
 
@@ -241,6 +250,9 @@ class MappingRuleOut(MappingRuleIn):
 class ResolveIn(BaseModel):
     product_name: str   # 상품명 원본 텍스트
 
+class BatchDeleteIn(BaseModel):
+    ids: list[int]
+
 class LoginIn(BaseModel):
     password: str
 
@@ -255,14 +267,6 @@ def login(data: LoginIn):
         return {'token': _create_token('viewer'), 'role': 'viewer'}
     raise HTTPException(401, '비밀번호가 틀렸습니다')
 
-
-@app.post('/admin/seed-products')
-def seed_products_api(db: Session = Depends(get_db), _: str = Depends(_require_admin)):
-    cnt = db.query(Product).count()
-    if cnt > 0:
-        return {'ok': False, 'message': f'이미 {cnt}개 상품 존재'}
-    n = _do_seed(db)
-    return {'ok': True, 'inserted': n}
 
 # ─── 제품 ────────────────────────────────────────────────
 
@@ -293,11 +297,8 @@ def update_product(product_id: int, data: ProductIn, db: Session = Depends(get_d
     p = db.get(Product, product_id)
     if not p:
         raise HTTPException(404, '제품을 찾을 수 없습니다')
-    p.name = data.name
-    p.color = data.color
-    p.size = data.size
-    p.model_code = data.model_code
-    p.barcode = data.barcode
+    for k, v in data.model_dump().items():
+        setattr(p, k, v)
     db.commit()
     db.refresh(p)
     return p
@@ -377,22 +378,18 @@ def delete_order(order_id: int, db: Session = Depends(get_db), _: str = Depends(
     return {'ok': True}
 
 @app.post('/orders/batch-delete')
-def batch_delete_orders(body: dict, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
-    from sqlalchemy import delete as sa_delete
-    ids: list[int] = body.get('ids', [])
-    if not ids:
+def batch_delete_orders(body: BatchDeleteIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
+    if not body.ids:
         return {'deleted': 0}
-    result = db.execute(sa_delete(Order).where(Order.id.in_(ids)))
+    result = db.execute(sa_delete(Order).where(Order.id.in_(body.ids)))
     db.commit()
     return {'deleted': result.rowcount}
 
 @app.post('/inventory/batch-delete')
-def batch_delete_inventory(body: dict, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
-    from sqlalchemy import delete as sa_delete
-    ids: list[int] = body.get('ids', [])
-    if not ids:
+def batch_delete_inventory(body: BatchDeleteIn, db: Session = Depends(get_db), _: str = Depends(_require_admin)):
+    if not body.ids:
         return {'deleted': 0}
-    result = db.execute(sa_delete(InventoryItem).where(InventoryItem.id.in_(ids)))
+    result = db.execute(sa_delete(InventoryItem).where(InventoryItem.id.in_(body.ids)))
     db.commit()
     return {'deleted': result.rowcount}
 

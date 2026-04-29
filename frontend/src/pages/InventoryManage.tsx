@@ -942,7 +942,7 @@ export default function InventoryManage() {
                     <p className="text-sm text-slate-700 truncate">
                       {item.product ? `${item.product.name} / ${item.product.color} / ${item.product.size}` : `제품 #${item.product_id}`}
                     </p>
-                    <p className="text-xs text-slate-400">{item.date}{item.notes ? ` · ${item.notes}` : ''}</p>
+                    <p className="text-xs text-slate-400 truncate">{item.date}{item.notes ? ` · ${item.notes}` : ''}</p>
                   </div>
                   {editingId === item.id ? (
                     <div className="flex items-center gap-1.5 flex-shrink-0">

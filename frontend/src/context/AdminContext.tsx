@@ -6,7 +6,6 @@ interface AdminContextType {
   isViewer: boolean
   loginAdmin: (password: string) => Promise<boolean>
   loginViewer: (password: string) => Promise<boolean>
-  login: (password: string) => Promise<boolean>  // 기존 호환
   logout: () => void
 }
 
@@ -15,7 +14,6 @@ const AdminContext = createContext<AdminContextType>({
   isViewer: false,
   loginAdmin: async () => false,
   loginViewer: async () => false,
-  login: async () => false,
   logout: () => {},
 })
 
@@ -59,8 +57,6 @@ export function AdminProvider({ children }: { children: ReactNode }) {
     return false
   }, [])
 
-  const login = loginAdmin  // 기존 PasswordModal 호환
-
   const logout = useCallback(() => {
     localStorage.removeItem('yak_token')
     localStorage.removeItem('yak_role')
@@ -69,7 +65,7 @@ export function AdminProvider({ children }: { children: ReactNode }) {
   }, [])
 
   return (
-    <AdminContext.Provider value={{ isAdmin, isViewer, loginAdmin, loginViewer, login, logout }}>
+    <AdminContext.Provider value={{ isAdmin, isViewer, loginAdmin, loginViewer, logout }}>
       {children}
     </AdminContext.Provider>
   )

@@ -9,16 +9,10 @@ import { exportOrders, exportInventory } from '../utils/exportXlsx'
 type ViewTab   = 'orders' | 'inventory'
 type GroupBy   = 'all' | 'month' | 'week' | 'day'
 
-function parseMDD(dateStr: string, year = dayjs().year()): dayjs.Dayjs {
-  const [m, dd] = dateStr.split('.')
-  if (!m || !dd) return dayjs()
-  return dayjs(`${year}-${m.padStart(2, '0')}-${dd.padStart(2, '0')}`)
-}
-
 function weekLabel(dateStr: string): string {
-  const d = parseMDD(dateStr)
-  const weekOfMonth = Math.ceil(d.date() / 7)
-  return `${d.month() + 1}월 ${weekOfMonth}주차`
+  const d = dayjs(dateStr)
+  if (!d.isValid()) return dateStr
+  return `${d.year()}년 ${d.month() + 1}월 ${Math.ceil(d.date() / 7)}주차`
 }
 
 // ─── 발주 인라인 편집 행 ──────────────────────────────────
@@ -137,7 +131,9 @@ function OrderRow({
       <td className="px-4 py-2.5 text-sm font-bold text-blue-700">{order.quantity}</td>
       <td className="px-4 py-2.5 text-sm text-slate-600">{order.recipient}</td>
       <td className="px-4 py-2.5 text-xs text-slate-500">{order.mall}</td>
-      <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[120px] truncate">{order.memo}</td>
+      <td className="px-4 py-2.5">
+        <div className="text-xs text-slate-400 truncate max-w-[150px]">{order.memo}</div>
+      </td>
       {isAdmin && (
         <td className="px-4 py-2.5 w-16">
           <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -247,7 +243,9 @@ function InventoryRow({
           {item.type === 'normal' ? '정상' : item.type === 'return' ? '변심반품' : '불량'}
         </span>
       </td>
-      <td className="px-4 py-2.5 text-xs text-slate-400">{item.notes}</td>
+      <td className="px-4 py-2.5">
+        <div className="text-xs text-slate-400 truncate max-w-[180px]">{item.notes}</div>
+      </td>
       {isAdmin && (
         <td className="px-4 py-2.5 w-16">
           <div className="flex gap-1.5 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -349,7 +347,10 @@ export default function History() {
 
   const getGroupKey = (dateStr: string): string => {
     if (groupBy === 'all')   return '전체'
-    if (groupBy === 'month') return `${dateStr.split('.')[0]}월`
+    if (groupBy === 'month') {
+      const d = dayjs(dateStr)
+      return d.isValid() ? `${d.year()}년 ${d.month() + 1}월` : dateStr
+    }
     if (groupBy === 'week')  return weekLabel(dateStr)
     if (groupBy === 'day')   return dateStr
     return dateStr

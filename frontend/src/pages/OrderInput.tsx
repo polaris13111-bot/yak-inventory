@@ -1013,7 +1013,7 @@ function BarcodeForm({ products }: { products: Product[] }) {
         order_date: date, storage, mall,
         orderer: '', recipient: '', phone: '', address: '', memo: '',
       }))
-      await Promise.all(orders.map(o => createOrder(o)))
+      await createOrdersBulk(orders)
       setResult(`${totalCount}건 등록 완료`)
       setScanned([])
       setTimeout(() => setResult(null), 2500)

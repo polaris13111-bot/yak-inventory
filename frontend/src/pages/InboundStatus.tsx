@@ -99,43 +99,77 @@ export default function InboundStatus() {
                     {dayItems.length}건 · {dayItems.reduce((s, it) => s + it.quantity, 0)}개
                   </span>
                 </div>
-                <table className="w-full text-sm">
-                  <tbody className="divide-y divide-slate-100">
-                    {dayItems.map(it => (
-                      <tr key={it.id} className="hover:bg-slate-50/60">
-                        <td className="px-4 py-2.5 font-medium text-slate-800">
-                          {it.product?.name ?? `#${it.product_id}`}
-                        </td>
-                        <td className="px-4 py-2.5">
+                {/* 데스크톱: 테이블 / 모바일: 카드 리스트 */}
+                <div className="hidden md:block overflow-x-auto">
+                  <table className="w-full text-sm" style={{ minWidth: '580px' }}>
+                    <tbody className="divide-y divide-slate-100">
+                      {dayItems.map(it => (
+                        <tr key={it.id} className="hover:bg-slate-50/60">
+                          <td className="px-4 py-2.5 font-medium text-slate-800 whitespace-nowrap">
+                            {it.product?.name ?? `#${it.product_id}`}
+                          </td>
+                          <td className="px-3 py-2.5 whitespace-nowrap">
+                            {it.product && (
+                              <span className="flex items-center gap-1.5 text-slate-600 text-xs">
+                                <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-black/10"
+                                  style={{ background: getColorHex(it.product.color) }} />
+                                {it.product.color}
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-3 py-2.5 text-slate-500 text-xs font-mono whitespace-nowrap w-12">
+                            {it.product?.size}
+                          </td>
+                          <td className="px-3 py-2.5 text-right font-semibold text-slate-800 whitespace-nowrap w-16">
+                            {it.quantity}개
+                          </td>
+                          <td className="px-3 py-2.5 text-center whitespace-nowrap w-20">
+                            {it.type === 'return'
+                              ? <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">변심반품</span>
+                              : it.type === 'defective'
+                              ? <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">불량</span>
+                              : <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">정상</span>
+                            }
+                          </td>
+                          <td className="px-3 py-2.5 w-48">
+                            <div className="text-xs text-slate-400 truncate max-w-[180px]">{it.notes}</div>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                {/* 모바일 카드 */}
+                <div className="md:hidden divide-y divide-slate-100">
+                  {dayItems.map(it => (
+                    <div key={it.id} className="flex items-center gap-3 px-4 py-3">
+                      <div className="flex-1 min-w-0">
+                        <div className="flex items-center gap-2 flex-wrap">
+                          <span className="text-sm font-medium text-slate-800">
+                            {it.product?.name ?? `#${it.product_id}`}
+                          </span>
                           {it.product && (
-                            <span className="flex items-center gap-1.5 text-slate-600 text-xs">
-                              <span className="w-2.5 h-2.5 rounded-full flex-shrink-0 ring-1 ring-black/10"
+                            <span className="flex items-center gap-1 text-xs text-slate-500">
+                              <span className="w-2 h-2 rounded-full ring-1 ring-black/10 flex-shrink-0"
                                 style={{ background: getColorHex(it.product.color) }} />
-                              {it.product.color}
+                              {it.product.color} / {it.product.size}
                             </span>
                           )}
-                        </td>
-                        <td className="px-4 py-2.5 text-slate-500 text-xs font-mono">
-                          {it.product?.size}
-                        </td>
-                        <td className="px-4 py-2.5 text-right font-semibold text-slate-800">
-                          {it.quantity}개
-                        </td>
-                        <td className="px-4 py-2.5 text-center">
-                          {it.type === 'return'
-                            ? <span className="text-xs px-2 py-0.5 bg-amber-100 text-amber-700 rounded-full">변심반품</span>
-                            : it.type === 'defective'
-                            ? <span className="text-xs px-2 py-0.5 bg-red-100 text-red-600 rounded-full">불량</span>
-                            : <span className="text-xs px-2 py-0.5 bg-blue-50 text-blue-600 rounded-full">정상</span>
-                          }
-                        </td>
-                        <td className="px-4 py-2.5 text-xs text-slate-400 max-w-[160px] truncate">
-                          {it.notes}
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
+                        </div>
+                        {it.notes ? <p className="text-xs text-slate-400 truncate mt-0.5">{it.notes}</p> : null}
+                      </div>
+                      <div className="flex items-center gap-2 flex-shrink-0">
+                        {it.type === 'return'
+                          ? <span className="text-xs px-1.5 py-0.5 bg-amber-100 text-amber-700 rounded">반품</span>
+                          : it.type === 'defective'
+                          ? <span className="text-xs px-1.5 py-0.5 bg-red-100 text-red-600 rounded">불량</span>
+                          : null
+                        }
+                        <span className="text-sm font-bold text-slate-800">{it.quantity}개</span>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             ))}
           </div>
