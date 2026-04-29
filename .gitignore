@@ -35,3 +35,5 @@ backend/server.log
 .env.local
 .env.production.local
 backend/.env
+env.md
+*.env.md
