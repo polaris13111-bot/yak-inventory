@@ -19,19 +19,24 @@ import PickingList from './pages/PickingList'
 import { AdminProvider, useAdmin } from './context/AdminContext'
 
 // ─── 네비 정의 ────────────────────────────────────────────
-const VIEWER_NAV = [
+// 조회 — 뷰어/관리자 공통
+const VIEW_NAV = [
   { to: '/',          icon: LayoutDashboard, label: '대시보드'  },
   { to: '/calendar',  icon: CalendarDays,    label: '출고 현황' },
   { to: '/stock',     icon: Boxes,           label: '현재고'    },
   { to: '/inbound',   icon: PackageCheck,    label: '입고 현황' },
   { to: '/analytics', icon: BarChart2,       label: '판매 분석' },
-  { to: '/picking',   icon: ListOrdered,     label: '피킹 리스트' },
 ]
-const ADMIN_INPUT_NAV = [
-  { to: '/order',     icon: ClipboardList, label: '발주 입력' },
-  { to: '/inventory', icon: PackagePlus,   label: '입고 관리' },
+// 작업 — 뷰어: 피킹만 / 관리자: 발주+입고+피킹
+const WORK_NAV_VIEWER = [
   { to: '/picking',   icon: ListOrdered,   label: '피킹 리스트' },
 ]
+const WORK_NAV_ADMIN = [
+  { to: '/order',     icon: ClipboardList, label: '발주 입력'   },
+  { to: '/inventory', icon: PackagePlus,   label: '입고 관리'   },
+  { to: '/picking',   icon: ListOrdered,   label: '피킹 리스트' },
+]
+// 관리 — 관리자 전용
 const ADMIN_MANAGE_NAV = [
   { to: '/history',  icon: History,  label: '내역 관리' },
   { to: '/settings', icon: Settings, label: '상품목록'  },
@@ -85,58 +90,58 @@ function PasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
 }
 
 // ─── 모바일 하단 탭 ───────────────────────────────────────
-// 뷰어/관리자 공통 탭 (조회 페이지) — 동일한 구성
+// 공통 1번째 줄 (조회)
 const COMMON_MOBILE_NAV = [
   { to: '/',          icon: LayoutDashboard, label: '대시보드' },
-  { to: '/calendar',  icon: CalendarDays,    label: '출고' },
-  { to: '/stock',     icon: Boxes,           label: '재고' },
+  { to: '/calendar',  icon: CalendarDays,    label: '출고'     },
+  { to: '/stock',     icon: Boxes,           label: '재고'     },
   { to: '/inbound',   icon: PackageCheck,    label: '입고현황' },
-  { to: '/analytics', icon: BarChart2,       label: '분석' },
+  { to: '/analytics', icon: BarChart2,       label: '분석'     },
 ]
-// 뷰어 전용 탭 (2번째 줄 — 피킹만)
-const VIEWER_MOBILE_NAV = [
-  { to: '/picking', icon: ListOrdered, label: '피킹 리스트' },
-]
-// 관리자 전용 탭 (2번째 줄)
+// 관리자 2번째 줄 (작업)
 const ADMIN_MOBILE_NAV = [
-  { to: '/order',     icon: ClipboardList, label: '발주 입력' },
-  { to: '/inventory', icon: PackagePlus,   label: '입고 관리' },
+  { to: '/order',     icon: ClipboardList, label: '발주' },
+  { to: '/inventory', icon: PackagePlus,   label: '입고' },
   { to: '/picking',   icon: ListOrdered,   label: '피킹' },
-  { to: '/history',   icon: History,       label: '내역 관리' },
+  { to: '/history',   icon: History,       label: '내역' },
 ]
 
 function BottomNav({ onAdminToggle, isAdmin, isViewer }: { onAdminToggle: () => void; isAdmin: boolean; isViewer: boolean }) {
   return (
     <nav className="fixed bottom-0 left-0 right-0 bg-white border-t border-slate-200 z-40 md:hidden">
-      {/* 관리자 전용 2번째 줄 */}
+
+      {/* 관리자 작업 탭 (2번째 줄 — 주황) */}
       {isAdmin && (
-        <div className="flex items-center border-b border-amber-100 bg-amber-50/80">
+        <div className="flex border-b border-amber-100 bg-gradient-to-r from-amber-50 to-orange-50">
+          <div className="flex-shrink-0 flex items-center px-2">
+            <span className="text-[8px] font-bold text-amber-400 uppercase tracking-wider">작업</span>
+          </div>
           {ADMIN_MOBILE_NAV.map(({ to, icon: Icon, label }) => (
             <NavLink key={to} to={to}
               className={({ isActive }) =>
                 `flex-1 flex flex-col items-center py-1.5 gap-0.5 text-[9px] font-medium transition-colors
-                 ${isActive ? 'text-amber-700' : 'text-amber-400 hover:text-amber-600'}`}>
-              <Icon size={16} />
+                 ${isActive ? 'text-amber-700 font-semibold' : 'text-amber-400 hover:text-amber-600'}`}>
+              <Icon size={15} />
               {label}
             </NavLink>
           ))}
         </div>
       )}
-      {/* 뷰어 전용 2번째 줄 (피킹 리스트) */}
+
+      {/* 뷰어 작업 탭 (2번째 줄 — 파란 인라인 배너) */}
       {!isAdmin && isViewer && (
-        <div className="flex items-center border-b border-blue-100 bg-blue-50/60">
-          {VIEWER_MOBILE_NAV.map(({ to, icon: Icon, label }) => (
-            <NavLink key={to} to={to}
-              className={({ isActive }) =>
-                `flex-1 flex flex-col items-center py-1.5 gap-0.5 text-[9px] font-medium transition-colors
-                 ${isActive ? 'text-blue-700' : 'text-blue-400 hover:text-blue-600'}`}>
-              <Icon size={16} />
-              {label}
-            </NavLink>
-          ))}
-        </div>
+        <NavLink to="/picking"
+          className={({ isActive }) =>
+            `flex items-center justify-center gap-2 py-2 border-b text-xs font-medium transition-colors
+             ${isActive
+               ? 'bg-blue-600 text-white border-blue-600'
+               : 'bg-blue-50 text-blue-600 border-blue-100 hover:bg-blue-100'}`}>
+          <ListOrdered size={14} />
+          피킹 리스트
+        </NavLink>
       )}
-      {/* 공통 1번째 줄 — 뷰어/관리자 동일 */}
+
+      {/* 공통 조회 탭 (1번째 줄) */}
       <div className="flex items-center">
         {COMMON_MOBILE_NAV.map(({ to, icon: Icon, label }) => (
           <NavLink key={to} to={to} end={to === '/'}
@@ -144,16 +149,16 @@ function BottomNav({ onAdminToggle, isAdmin, isViewer }: { onAdminToggle: () => 
               `flex-1 flex flex-col items-center py-2 gap-0.5 text-[10px] font-medium transition-colors
                ${isActive
                  ? isAdmin ? 'text-amber-600' : 'text-blue-600'
-                 : 'text-slate-400'}`}>
-            <Icon size={20} />
+                 : 'text-slate-400 hover:text-slate-600'}`}>
+            <Icon size={19} />
             {label}
           </NavLink>
         ))}
         {/* 모드 전환 버튼 */}
         <button onClick={onAdminToggle}
           className={`flex-1 flex flex-col items-center py-2 gap-0.5 text-[10px] font-medium transition-colors
-            ${isAdmin ? 'text-amber-600' : 'text-slate-400'}`}>
-          {isAdmin ? <LockOpen size={20} /> : <Lock size={20} />}
+            ${isAdmin ? 'text-amber-600' : 'text-slate-400 hover:text-slate-600'}`}>
+          {isAdmin ? <LockOpen size={19} /> : <Lock size={19} />}
           {isAdmin ? '관리자' : '뷰어'}
         </button>
       </div>
@@ -202,52 +207,65 @@ function Layout() {
           </button>
         </div>
 
-        <nav className="flex-1 px-3 py-4 overflow-y-auto">
-          <div className="space-y-1">
-            {VIEWER_NAV.map(({ to, icon: Icon, label }) => (
-              <NavLink key={to} to={to} end={to === '/'}
-                className={({ isActive }) =>
-                  `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                   ${isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
-                <Icon size={18} />{label}
-              </NavLink>
-            ))}
+        <nav className="flex-1 px-3 py-4 overflow-y-auto space-y-5">
+
+          {/* 조회 섹션 */}
+          <div>
+            <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">조회</p>
+            <div className="space-y-0.5">
+              {VIEW_NAV.map(({ to, icon: Icon, label }) => (
+                <NavLink key={to} to={to} end={to === '/'}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                     ${isActive ? 'bg-blue-50 text-blue-700' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
+                  <Icon size={17} />{label}
+                </NavLink>
+              ))}
+            </div>
           </div>
 
-          {isAdmin ? (
-            <div className="mt-4 space-y-3">
-              <div>
-                <p className="px-3 mb-1 text-xs font-semibold text-amber-500 uppercase tracking-wide">입력</p>
-                <div className="space-y-0.5">
-                  {ADMIN_INPUT_NAV.map(({ to, icon: Icon, label }) => (
-                    <NavLink key={to} to={to}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                         ${isActive ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-amber-50/60 hover:text-amber-700'}`}>
-                      <Icon size={18} />{label}
-                    </NavLink>
-                  ))}
-                </div>
-              </div>
-              <div>
-                <p className="px-3 mb-1 text-xs font-semibold text-amber-500 uppercase tracking-wide">설정·관리</p>
-                <div className="space-y-0.5">
-                  {ADMIN_MANAGE_NAV.map(({ to, icon: Icon, label }) => (
-                    <NavLink key={to} to={to}
-                      className={({ isActive }) =>
-                        `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                         ${isActive ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-amber-50/60 hover:text-amber-700'}`}>
-                      <Icon size={18} />{label}
-                    </NavLink>
-                  ))}
-                </div>
+          {/* 작업 섹션 — 뷰어/관리자 공통 (내용만 다름) */}
+          <div>
+            <p className="px-3 mb-1.5 text-[10px] font-bold text-slate-400 uppercase tracking-widest">작업</p>
+            <div className="space-y-0.5">
+              {(isAdmin ? WORK_NAV_ADMIN : WORK_NAV_VIEWER).map(({ to, icon: Icon, label }) => (
+                <NavLink key={to} to={to}
+                  className={({ isActive }) =>
+                    `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                     ${isActive
+                       ? isAdmin ? 'bg-amber-50 text-amber-700' : 'bg-blue-50 text-blue-700'
+                       : isAdmin
+                         ? 'text-slate-600 hover:bg-amber-50/60 hover:text-amber-700'
+                         : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
+                  <Icon size={17} />{label}
+                </NavLink>
+              ))}
+            </div>
+          </div>
+
+          {/* 관리 섹션 — 관리자 전용 */}
+          {isAdmin && (
+            <div>
+              <p className="px-3 mb-1.5 text-[10px] font-bold text-amber-400 uppercase tracking-widest">관리</p>
+              <div className="space-y-0.5">
+                {ADMIN_MANAGE_NAV.map(({ to, icon: Icon, label }) => (
+                  <NavLink key={to} to={to}
+                    className={({ isActive }) =>
+                      `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
+                       ${isActive ? 'bg-amber-50 text-amber-700' : 'text-slate-600 hover:bg-amber-50/60 hover:text-amber-700'}`}>
+                    <Icon size={17} />{label}
+                  </NavLink>
+                ))}
               </div>
             </div>
-          ) : (
-            <div className="mt-4 px-3 py-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">
+          )}
+
+          {/* 비로그인 안내 */}
+          {!isAdmin && !isViewer && (
+            <div className="px-3 py-3 bg-slate-50 rounded-lg border border-dashed border-slate-200">
               <p className="text-xs text-slate-400 leading-relaxed">
                 <Lock size={11} className="inline mr-1 mb-0.5" />
-                내역·발주·입고·설정은<br />관리자 모드에서 가능합니다
+                로그인하면 더 많은 메뉴를<br />사용할 수 있습니다
               </p>
             </div>
           )}
@@ -260,8 +278,8 @@ function Layout() {
         </div>
       </aside>
 
-      {/* 메인 콘텐츠 — 관리자 2줄 탭 높이 고려 */}
-      <main className={`flex-1 overflow-auto md:pb-0 ${isAdmin ? 'pb-24' : 'pb-16'}`}>
+      {/* 메인 콘텐츠 */}
+      <main className={`flex-1 overflow-auto md:pb-0 ${(isAdmin || isViewer) ? 'pb-24' : 'pb-16'}`}>
         <Routes>
           <Route path="/"          element={<Dashboard />} />
           <Route path="/calendar"  element={<StockCalendar />} />
