@@ -7,19 +7,28 @@ on:
 env:
   PROJECT_ID: blackyak-493519
   REGION: asia-northeast3
-  SERVICE: yak-inventory
   IMAGE: asia-northeast3-docker.pkg.dev/blackyak-493519/yak-inventory/app
 
+# ────────────────────────────────────────────────────────────
+# 고객사 추가 방법:
+#   1. 아래 jobs 블록에 deploy-xxx 잡 하나 복사·붙여넣기
+#   2. SERVICE / BUCKET / APP_NAME / APP_SUB 값 변경
+#   3. GitHub Secrets에 XXX_JWT_SECRET 등 추가
+# ────────────────────────────────────────────────────────────
+
 jobs:
-  deploy:
+
+  # ── 공통: 이미지 한 번만 빌드 ──────────────────────────────
+  build:
     runs-on: ubuntu-latest
     permissions:
       contents: read
-      id-token: write   # WIF 필수
+      id-token: write
+    outputs:
+      sha: ${{ github.sha }}
 
     steps:
-      - name: Checkout
-        uses: actions/checkout@v4
+      - uses: actions/checkout@v4
 
       - name: Authenticate to GCP
         uses: google-github-actions/auth@v2
@@ -32,11 +41,35 @@ jobs:
 
       - name: Build and Push Image
         run: |
-          docker build -t ${{ env.IMAGE }}:${{ github.sha }} -t ${{ env.IMAGE }}:latest .
+          docker build \
+            -t ${{ env.IMAGE }}:${{ github.sha }} \
+            -t ${{ env.IMAGE }}:latest \
+            .
           docker push ${{ env.IMAGE }}:${{ github.sha }}
           docker push ${{ env.IMAGE }}:latest
 
-      - name: Deploy to Cloud Run
+
+  # ── 고객사 A: 야크 (기존) ───────────────────────────────────
+  deploy-yak:
+    needs: build
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      id-token: write
+    env:
+      SERVICE: yak-inventory
+      BUCKET: yak-inventory-data
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Authenticate to GCP
+        uses: google-github-actions/auth@v2
+        with:
+          workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+          service_account: github-deploy@blackyak-493519.iam.gserviceaccount.com
+
+      - name: Deploy to Cloud Run (야크)
         run: |
           gcloud run deploy ${{ env.SERVICE }} \
             --image ${{ env.IMAGE }}:${{ github.sha }} \
@@ -48,7 +81,45 @@ jobs:
             --cpu 1 \
             --min-instances 1 \
             --max-instances 1 \
-            --set-env-vars "DATABASE_URL=sqlite:////data/yak.db,JWT_SECRET=${{ secrets.JWT_SECRET }},ADMIN_PASSWORD=${{ secrets.ADMIN_PASSWORD }},VIEWER_PASSWORD=${{ secrets.VIEWER_PASSWORD }},BACKUP_TOKEN=${{ secrets.BACKUP_TOKEN }}" \
-            --add-volume=name=db-vol,type=cloud-storage,bucket=yak-inventory-data \
+            --set-env-vars "DATABASE_URL=sqlite:////data/yak.db,JWT_SECRET=${{ secrets.YAK_JWT_SECRET }},ADMIN_PASSWORD=${{ secrets.YAK_ADMIN_PASSWORD }},VIEWER_PASSWORD=${{ secrets.YAK_VIEWER_PASSWORD }},BACKUP_TOKEN=${{ secrets.YAK_BACKUP_TOKEN }}" \
+            --add-volume=name=db-vol,type=cloud-storage,bucket=${{ env.BUCKET }} \
             --add-volume-mount=volume=db-vol,mount-path=/data \
             --quiet
+
+
+  # ── 고객사 B 추가 예시 (주석 해제 후 사용) ──────────────────
+  # deploy-clientb:
+  #   needs: build
+  #   runs-on: ubuntu-latest
+  #   permissions:
+  #     contents: read
+  #     id-token: write
+  #   env:
+  #     SERVICE: clientb-inventory          # Cloud Run 서비스 이름
+  #     BUCKET: clientb-inventory-data      # GCS 버킷 이름
+  #
+  #   steps:
+  #     - uses: actions/checkout@v4
+  #
+  #     - name: Authenticate to GCP
+  #       uses: google-github-actions/auth@v2
+  #       with:
+  #         workload_identity_provider: ${{ secrets.WIF_PROVIDER }}
+  #         service_account: github-deploy@blackyak-493519.iam.gserviceaccount.com
+  #
+  #     - name: Deploy to Cloud Run (고객사B)
+  #       run: |
+  #         gcloud run deploy ${{ env.SERVICE }} \
+  #           --image ${{ env.IMAGE }}:${{ github.sha }} \
+  #           --region ${{ env.REGION }} \
+  #           --platform managed \
+  #           --allow-unauthenticated \
+  #           --port 8080 \
+  #           --memory 512Mi \
+  #           --cpu 1 \
+  #           --min-instances 1 \
+  #           --max-instances 1 \
+  #           --set-env-vars "DATABASE_URL=sqlite:////data/yak.db,JWT_SECRET=${{ secrets.CLIENTB_JWT_SECRET }},ADMIN_PASSWORD=${{ secrets.CLIENTB_ADMIN_PASSWORD }},VIEWER_PASSWORD=${{ secrets.CLIENTB_VIEWER_PASSWORD }},BACKUP_TOKEN=${{ secrets.CLIENTB_BACKUP_TOKEN }}" \
+  #           --add-volume=name=db-vol,type=cloud-storage,bucket=${{ env.BUCKET }} \
+  #           --add-volume-mount=volume=db-vol,mount-path=/data \
+  #           --quiet

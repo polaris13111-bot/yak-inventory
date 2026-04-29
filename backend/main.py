@@ -125,6 +125,8 @@ def _seed_products():
     except Exception as e:
         print(f'[seed] 실패: {e}')
 
+# _seed_products() 는 고객사별 빈 DB 배포 후 백업·복원으로 초기 데이터 주입
+# seed_products.json 이 존재할 때만 동작하므로, 파일 없으면 자동 스킵됨
 _seed_products()
 _migrate_dates()
 
