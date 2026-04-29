@@ -664,15 +664,16 @@ def seed_default_rules(db: Session = Depends(get_db), _: str = Depends(_require_
 # ─── 백업 / 복원 ─────────────────────────────────────────────
 
 @app.post('/backup/auto')
-def backup_auto(authorization: Optional[str] = Header(None)):
+def backup_auto(x_backup_token: Optional[str] = Header(None)):
     """
     Cloud Scheduler가 매일 새벽 호출 → /data/backup/ 폴더에 날짜별 DB 스냅샷 저장.
     BACKUP_TOKEN 환경변수로 인증 (일반 JWT와 별도).
+    X-Backup-Token 헤더 사용 (Authorization 헤더는 Cloud Scheduler가 override함).
     """
     # 토큰 검증
     if not _BACKUP_TOKEN:
         raise HTTPException(503, 'BACKUP_TOKEN 환경변수가 설정되지 않았습니다')
-    if not authorization or authorization != f'Bearer {_BACKUP_TOKEN}':
+    if not x_backup_token or x_backup_token != _BACKUP_TOKEN:
         raise HTTPException(401, '백업 토큰이 유효하지 않습니다')
 
     # 실제 DB 경로 (SQLAlchemy ENGINE URL에서 추출)
