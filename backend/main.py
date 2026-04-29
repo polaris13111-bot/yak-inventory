@@ -675,9 +675,10 @@ def backup_auto(authorization: Optional[str] = Header(None)):
     if not authorization or authorization != f'Bearer {_BACKUP_TOKEN}':
         raise HTTPException(401, '백업 토큰이 유효하지 않습니다')
 
-    src = Path('/tmp/yak.db')
+    # 실제 DB 경로 (SQLAlchemy ENGINE URL에서 추출)
+    src = Path(ENGINE.url.database)
     if not src.exists():
-        raise HTTPException(503, '/tmp/yak.db 파일이 없습니다')
+        raise HTTPException(503, f'{src} 파일이 없습니다')
 
     backup_dir = Path('/data/backup')
     try:
