@@ -22,7 +22,7 @@ from models import ENGINE, init_db, Product, Order, InventoryItem, InventoryType
 # ── JWT 설정 ──────────────────────────────────────────────
 _JWT_SECRET  = os.getenv('JWT_SECRET', 'yak-jwt-secret-2026')
 _JWT_ALG     = 'HS256'
-_TOKEN_EXP_H = 24  # 토큰 유효시간 (시간)
+_TOKEN_EXP_H = int(os.getenv('TOKEN_EXPIRE_HOURS', '24'))  # 기본 24h, 영구기기는 87600 (10년)
 _ADMIN_PW    = os.getenv('ADMIN_PASSWORD',  'newface')
 _VIEWER_PW   = os.getenv('VIEWER_PASSWORD', 'blackyak')
 _BACKUP_TOKEN = os.getenv('BACKUP_TOKEN', '')  # Cloud Scheduler 전용 토큰
