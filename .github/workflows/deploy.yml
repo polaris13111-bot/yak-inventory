@@ -58,7 +58,6 @@ jobs:
       id-token: write
     env:
       SERVICE: yak-inventory
-      BUCKET: yak-inventory-data
 
     steps:
       - uses: actions/checkout@v4
@@ -95,7 +94,6 @@ jobs:
       id-token: write
     env:
       SERVICE: warehouse-inventory
-      BUCKET: warehouse-inventory-data
 
     steps:
       - uses: actions/checkout@v4

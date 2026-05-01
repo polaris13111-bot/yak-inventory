@@ -8,7 +8,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
 from sqlalchemy.orm import Session, sessionmaker
-from sqlalchemy import func, text, delete as sa_delete
+from sqlalchemy import func, delete as sa_delete
 from pydantic import BaseModel
 from typing import Optional
 from openpyxl import Workbook, load_workbook
