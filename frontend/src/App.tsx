@@ -458,11 +458,15 @@ export function useAppConfig() {
   useEffect(() => {
     fetch('/config')
       .then(r => r.json())
-      .then(d => setConfig({
-        name:  d.app_name,
-        sub:   d.app_sub,
-        theme: d.app_theme === 'green' ? 'green' : 'blue',
-      }))
+      .then(d => {
+        const next = {
+          name:  d.app_name,
+          sub:   d.app_sub,
+          theme: d.app_theme === 'green' ? 'green' : 'blue',
+        } as typeof AppConfig
+        setConfig(next)
+        document.title = next.name  // 크롬 탭 이름 동적 설정
+      })
       .catch(() => {})
   }, [])
   return config
