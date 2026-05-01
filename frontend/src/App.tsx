@@ -71,10 +71,10 @@ function PasswordModal({ onClose, onSuccess }: { onClose: () => void; onSuccess:
         </div>
         <form onSubmit={handleSubmit} className="space-y-4">
           <input
-            ref={inputRef} type="password" value={pw}
-            onChange={e => setPw(e.target.value)} placeholder="••••"
-            autoComplete="current-password"
-            className={`w-full border rounded-lg px-3 py-2.5 text-sm text-center tracking-widest
+            ref={inputRef} type="text" value={pw}
+            onChange={e => setPw(e.target.value)} placeholder="비밀번호"
+            autoComplete="off"
+            className={`w-full border rounded-lg px-3 py-2.5 text-sm text-center
               focus:outline-none focus:ring-2 transition-all
               ${error ? 'border-red-300 bg-red-50 focus:ring-red-300' : 'border-slate-200 focus:ring-blue-400'}`}
           />
@@ -163,15 +163,15 @@ function Layout() {
 
       {/* 사이드바 — 데스크탑만 */}
       <aside className={`hidden md:flex w-56 flex-col shadow-sm border-r
-        ${t === 'green' ? 'bg-green-900 border-green-800' : 'bg-white border-slate-200'}`}>
-        <div className={`px-5 py-5 border-b ${t === 'green' ? 'border-green-800' : 'border-slate-100'}`}>
+        ${t === 'green' ? 'bg-green-50 border-green-200' : 'bg-white border-slate-200'}`}>
+        <div className={`px-5 py-5 border-b ${t === 'green' ? 'border-green-200' : 'border-slate-100'}`}>
           <div className="flex items-center gap-2">
             <span className="text-2xl">{t === 'green' ? '🏭' : '🏔️'}</span>
             <div>
-              <p className={`font-bold text-sm leading-tight ${t === 'green' ? 'text-white' : 'text-slate-800'}`}>
+              <p className={`font-bold text-sm leading-tight ${t === 'green' ? 'text-green-900' : 'text-slate-800'}`}>
                 {config.name}
               </p>
-              <p className={`text-xs ${t === 'green' ? 'text-green-300' : 'text-slate-400'}`}>
+              <p className={`text-xs ${t === 'green' ? 'text-green-600' : 'text-slate-400'}`}>
                 {config.sub}
               </p>
             </div>
@@ -182,13 +182,13 @@ function Layout() {
               ${isAdmin
                 ? 'bg-amber-50 border border-amber-200 text-amber-700 hover:bg-amber-100'
                 : t === 'green'
-                  ? 'bg-green-800 border border-green-700 text-green-200 hover:bg-green-700'
+                  ? 'bg-green-100 border border-green-300 text-green-700 hover:bg-green-200'
                   : 'bg-slate-50 border border-slate-200 text-slate-500 hover:bg-slate-100'}`}>
             <span className="flex items-center gap-1.5">
               {isAdmin ? <><LockOpen size={13} />관리자 모드</> : <><Eye size={13} />뷰어 모드</>}
             </span>
             <span className={`text-xs px-1.5 py-0.5 rounded font-bold
-              ${isAdmin ? 'bg-amber-200 text-amber-800' : t === 'green' ? 'bg-green-700 text-green-200' : 'bg-slate-200 text-slate-600'}`}>
+              ${isAdmin ? 'bg-amber-200 text-amber-800' : t === 'green' ? 'bg-green-200 text-green-800' : 'bg-slate-200 text-slate-600'}`}>
               {isAdmin ? 'ON' : 'OFF'}
             </span>
           </button>
@@ -198,13 +198,13 @@ function Layout() {
 
           {/* 조회 섹션 */}
           <div>
-            <p className={`px-3 mb-1.5 text-[10px] font-bold uppercase tracking-widest ${t === 'green' ? 'text-green-400' : 'text-slate-400'}`}>조회</p>
+            <p className={`px-3 mb-1.5 text-[10px] font-bold uppercase tracking-widest ${t === 'green' ? 'text-green-500' : 'text-slate-400'}`}>조회</p>
             <div className="space-y-0.5">
               {VIEW_NAV.map(({ to, icon: Icon, label }) => (
                 <NavLink key={to} to={to} end={to === '/'}
                   className={({ isActive }) =>
                     `flex items-center gap-3 px-3 py-2.5 rounded-lg text-sm font-medium transition-colors
-                     ${isActive ? themeActive(t) : t === 'green' ? 'text-green-100 hover:bg-green-800 hover:text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
+                     ${isActive ? themeActive(t) : t === 'green' ? 'text-green-800 hover:bg-green-100 hover:text-green-900' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
                   <Icon size={17} />{label}
                 </NavLink>
               ))}
@@ -213,7 +213,7 @@ function Layout() {
 
           {/* 작업 섹션 — 뷰어/관리자 공통 (내용만 다름) */}
           <div>
-            <p className={`px-3 mb-1.5 text-[10px] font-bold uppercase tracking-widest ${t === 'green' ? 'text-green-400' : 'text-slate-400'}`}>작업</p>
+            <p className={`px-3 mb-1.5 text-[10px] font-bold uppercase tracking-widest ${t === 'green' ? 'text-green-500' : 'text-slate-400'}`}>작업</p>
             <div className="space-y-0.5">
               {(isAdmin ? WORK_NAV_ADMIN : WORK_NAV_VIEWER).map(({ to, icon: Icon, label }) => (
                 <NavLink key={to} to={to}
@@ -223,7 +223,7 @@ function Layout() {
                        ? isAdmin ? 'bg-amber-50 text-amber-700' : themeActive(t)
                        : isAdmin
                          ? 'text-slate-600 hover:bg-amber-50/60 hover:text-amber-700'
-                         : t === 'green' ? 'text-green-100 hover:bg-green-800 hover:text-white' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
+                         : t === 'green' ? 'text-green-800 hover:bg-green-100 hover:text-green-900' : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'}`}>
                   <Icon size={17} />{label}
                 </NavLink>
               ))}
@@ -249,8 +249,8 @@ function Layout() {
 
           {/* 비로그인 안내 */}
           {!isAdmin && !isViewer && (
-            <div className={`px-3 py-3 rounded-lg border border-dashed ${t === 'green' ? 'bg-green-800/50 border-green-700' : 'bg-slate-50 border-slate-200'}`}>
-              <p className={`text-xs leading-relaxed ${t === 'green' ? 'text-green-300' : 'text-slate-400'}`}>
+            <div className={`px-3 py-3 rounded-lg border border-dashed ${t === 'green' ? 'bg-green-100 border-green-300' : 'bg-slate-50 border-slate-200'}`}>
+              <p className={`text-xs leading-relaxed ${t === 'green' ? 'text-green-600' : 'text-slate-400'}`}>
                 <Lock size={11} className="inline mr-1 mb-0.5" />
                 로그인하면 더 많은 메뉴를<br />사용할 수 있습니다
               </p>
@@ -258,8 +258,8 @@ function Layout() {
           )}
         </nav>
 
-        <div className={`px-3 py-3 border-t ${t === 'green' ? 'border-green-800' : 'border-slate-100'}`}>
-          <p className={`text-xs px-3 pt-1 ${t === 'green' ? 'text-green-400' : 'text-slate-400'}`}>
+        <div className={`px-3 py-3 border-t ${t === 'green' ? 'border-green-200' : 'border-slate-100'}`}>
+          <p className={`text-xs px-3 pt-1 ${t === 'green' ? 'text-green-500' : 'text-slate-400'}`}>
             {config.sub || '뉴페이스'} © 2026
           </p>
         </div>
@@ -328,12 +328,12 @@ function PwForm({ onSubmit, color, pw, setPw, error, onBack, inputRef }: PwFormP
       </div>
       <input
         ref={inputRef}
-        type="password"
+        type="text"
         value={pw}
         onChange={e => setPw(e.target.value)}
-        placeholder="••••••••"
-        autoComplete="current-password"
-        className={`w-full border rounded-xl px-4 py-3 text-center text-lg tracking-widest
+        placeholder="비밀번호"
+        autoComplete="off"
+        className={`w-full border rounded-xl px-4 py-3 text-center text-lg
           focus:outline-none focus:ring-2 transition-all
           ${error
             ? 'border-red-300 bg-red-50 focus:ring-red-300'
@@ -387,12 +387,12 @@ function EntryScreen({ onEnter }: { onEnter: () => void }) {
   const t = config.theme
 
   return (
-    <div className={`min-h-screen flex items-center justify-center ${t === 'green' ? 'bg-green-900' : 'bg-slate-50'}`}>
+    <div className={`min-h-screen flex items-center justify-center ${t === 'green' ? 'bg-green-50' : 'bg-slate-50'}`}>
       <div className="w-full max-w-sm space-y-6 px-4">
         <div className="text-center space-y-1">
           <div className="text-5xl mb-3">{t === 'green' ? '🏭' : '🏔️'}</div>
-          <h1 className={`text-2xl font-bold ${t === 'green' ? 'text-white' : 'text-slate-800'}`}>{config.name}</h1>
-          <p className={`text-sm ${t === 'green' ? 'text-green-300' : 'text-slate-400'}`}>
+          <h1 className={`text-2xl font-bold ${t === 'green' ? 'text-green-900' : 'text-slate-800'}`}>{config.name}</h1>
+          <p className={`text-sm ${t === 'green' ? 'text-green-600' : 'text-slate-400'}`}>
             {config.sub ? `${config.sub} ` : ''}관리 시스템
           </p>
         </div>
