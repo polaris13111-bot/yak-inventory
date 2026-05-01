@@ -1,6 +1,7 @@
-from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime, ForeignKey, create_engine
+from sqlalchemy import Column, Integer, String, Boolean, Enum, DateTime, Date, ForeignKey, create_engine
+from sqlalchemy.dialects.postgresql import JSONB
 from sqlalchemy.orm import declarative_base, relationship
-from datetime import datetime
+from datetime import datetime, date
 import enum
 import os
 
@@ -17,7 +18,7 @@ else:
     ENGINE = create_engine(
         _db_url,
         echo=False,
-        pool_pre_ping=True,     # 끊어진 연결 자동 감지
+        pool_pre_ping=True,
         pool_size=5,
         max_overflow=10,
     )
@@ -37,7 +38,7 @@ class Product(Base):
     size        = Column(String, nullable=False)
     model_code  = Column(String, default='')
     barcode     = Column(String, default='')
-    active      = Column(Boolean, default=True)
+    active      = Column(Boolean, nullable=False, default=True)
     orders      = relationship('Order', back_populates='product')
     inventories = relationship('InventoryItem', back_populates='product')
 
@@ -45,10 +46,10 @@ class Product(Base):
 class Order(Base):
     __tablename__ = 'orders'
     id          = Column(Integer, primary_key=True, autoincrement=True)
-    date        = Column(String, nullable=False)
-    product_id  = Column(Integer, ForeignKey('products.id'))
+    date        = Column(Date, nullable=False)
+    product_id  = Column(Integer, ForeignKey('products.id'), nullable=False)
     quantity    = Column(Integer, nullable=False)
-    order_date  = Column(String, default='')
+    order_date  = Column(Date, nullable=True)
     storage     = Column(String, default='뉴페이스')
     mall        = Column(String, default='')
     orderer     = Column(String, default='')
@@ -63,8 +64,8 @@ class Order(Base):
 class InventoryItem(Base):
     __tablename__ = 'inventory'
     id          = Column(Integer, primary_key=True, autoincrement=True)
-    date        = Column(String, nullable=False)
-    product_id  = Column(Integer, ForeignKey('products.id'))
+    date        = Column(Date, nullable=False)
+    product_id  = Column(Integer, ForeignKey('products.id'), nullable=False)
     quantity    = Column(Integer, nullable=False)
     type        = Column(Enum(InventoryType), default=InventoryType.normal)
     notes       = Column(String, default='')
@@ -76,9 +77,9 @@ class MappingRule(Base):
     __tablename__ = 'mapping_rules'
     id          = Column(Integer, primary_key=True, autoincrement=True)
     rule_name   = Column(String, default='')
-    product_id  = Column(Integer, ForeignKey('products.id'), nullable=True)
+    product_id  = Column(Integer, ForeignKey('products.id'), nullable=False)
     match_type  = Column(String, default='and')
-    keywords    = Column(String, default='[]')
+    keywords    = Column(JSONB, default=list)      # ['키워드1', '키워드2']
     enabled     = Column(Boolean, default=True)
     priority    = Column(Integer, default=0)
     created_at  = Column(DateTime, default=datetime.now)

@@ -1,5 +1,6 @@
 import json
 import os
+import calendar
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timedelta, date as date_type
@@ -110,10 +111,10 @@ class ProductOut(BaseModel):
     model_config = {'from_attributes': True}
 
 class OrderIn(BaseModel):
-    date: str
+    date: date_type
     product_id: int
     quantity: int
-    order_date: str = ''
+    order_date: Optional[date_type] = None
     storage: str = '뉴페이스'
     mall: str = ''
     orderer: str = ''
@@ -129,7 +130,7 @@ class OrderOut(OrderIn):
     model_config = {'from_attributes': True}
 
 class InventoryIn(BaseModel):
-    date: str
+    date: date_type
     product_id: int
     quantity: int
     type: InventoryType = InventoryType.normal
@@ -149,7 +150,7 @@ class StockSummaryOut(BaseModel):
     low_stock: bool
 
 class DailyOutboundOut(BaseModel):
-    date: str
+    date: date_type
     product_id: int
     quantity: int
 
@@ -174,7 +175,7 @@ class MappingRuleOut(MappingRuleIn):
             rule_name=rule.rule_name,
             product_id=rule.product_id,
             match_type=rule.match_type,
-            keywords=json.loads(rule.keywords or '[]'),
+            keywords=rule.keywords or [],
             enabled=rule.enabled,
             priority=rule.priority,
             created_at=rule.created_at,
@@ -266,6 +267,13 @@ def toggle_product_active(product_id: int, db: Session = Depends(get_db), _: str
 
 # ─── 발주 ────────────────────────────────────────────────
 
+def _month_range(month: str):
+    """'2026-04' → (date(2026,4,1), date(2026,4,30))"""
+    year, mon = map(int, month.split('-'))
+    last = calendar.monthrange(year, mon)[1]
+    return date_type(year, mon, 1), date_type(year, mon, last)
+
+
 @app.get('/orders', response_model=list[OrderOut])
 def get_orders(
     month: Optional[str] = None,
@@ -275,10 +283,10 @@ def get_orders(
 ):
     q = db.query(Order)
     if month:
-        # month: "2026-04" → LIKE '2026-04-%'
-        q = q.filter(Order.date.like(f'{month}-%'))
+        start, end = _month_range(month)
+        q = q.filter(Order.date.between(start, end))
     if date:
-        q = q.filter(Order.date == date)
+        q = q.filter(Order.date == date_type.fromisoformat(date))
     return q.order_by(Order.date).all()
 
 
@@ -348,7 +356,8 @@ def create_orders_bulk(data: list[OrderIn], db: Session = Depends(get_db), _: st
 def get_inventory(month: Optional[str] = None, db: Session = Depends(get_db), _role: str = Depends(_verify_token)):
     q = db.query(InventoryItem)
     if month:
-        q = q.filter(InventoryItem.date.like(f'{month}-%'))
+        start, end = _month_range(month)
+        q = q.filter(InventoryItem.date.between(start, end))
     return q.order_by(InventoryItem.date).all()
 
 
@@ -405,14 +414,16 @@ def get_stock_summary(month: Optional[str] = None, db: Session = Depends(get_db)
 
     inv_q = db.query(InventoryItem.product_id, func.sum(InventoryItem.quantity).label('total'))
     if month:
-        inv_q = inv_q.filter(InventoryItem.date.like(f'{month}-%'))
+        start, end = _month_range(month)
+        inv_q = inv_q.filter(InventoryItem.date.between(start, end))
     # 불량 입고는 현재고에서 제외
     inv_q = inv_q.filter(InventoryItem.type != InventoryType.defective)
     inv_map = {r.product_id: r.total for r in inv_q.group_by(InventoryItem.product_id).all()}
 
     ord_q = db.query(Order.product_id, func.sum(Order.quantity).label('total'))
     if month:
-        ord_q = ord_q.filter(Order.date.like(f'{month}-%'))
+        start, end = _month_range(month)
+        ord_q = ord_q.filter(Order.date.between(start, end))
     ord_map = {r.product_id: r.total for r in ord_q.group_by(Order.product_id).all()}
 
     result = []
@@ -429,10 +440,11 @@ def get_stock_summary(month: Optional[str] = None, db: Session = Depends(get_db)
 
 @app.get('/stock/daily', response_model=list[DailyOutboundOut])
 def get_daily_outbound(month: str, db: Session = Depends(get_db), _role: str = Depends(_verify_token)):
+    start, end = _month_range(month)
     rows = db.query(
         Order.date, Order.product_id,
         func.sum(Order.quantity).label('quantity'),
-    ).filter(Order.date.like(f'{month}-%')).group_by(Order.date, Order.product_id).all()
+    ).filter(Order.date.between(start, end)).group_by(Order.date, Order.product_id).all()
     return [DailyOutboundOut(date=r.date, product_id=r.product_id, quantity=r.quantity)
             for r in rows]
 
@@ -451,7 +463,7 @@ def create_mapping_rule(data: MappingRuleIn, db: Session = Depends(get_db), _: s
         rule_name=data.rule_name,
         product_id=data.product_id,
         match_type=data.match_type,
-        keywords=json.dumps(data.keywords, ensure_ascii=False),
+        keywords=data.keywords,
         enabled=data.enabled,
         priority=data.priority,
     )
@@ -469,7 +481,7 @@ def update_mapping_rule(rule_id: int, data: MappingRuleIn, db: Session = Depends
     rule.rule_name  = data.rule_name
     rule.product_id = data.product_id
     rule.match_type = data.match_type
-    rule.keywords   = json.dumps(data.keywords, ensure_ascii=False)
+    rule.keywords   = data.keywords
     rule.enabled    = data.enabled
     rule.priority   = data.priority
     db.commit()
@@ -509,7 +521,7 @@ def resolve_product(data: ResolveIn, db: Session = Depends(get_db)):
     ).all()
 
     for rule in rules:
-        keywords = json.loads(rule.keywords or '[]')
+        keywords = rule.keywords or []
         if not keywords:
             continue
         normalized = text.upper()
@@ -553,7 +565,7 @@ def seed_default_rules(db: Session = Depends(get_db), _: str = Depends(_require_
                 rule_name=f'{name}',
                 product_id=pid,
                 match_type=mtype,
-                keywords=json.dumps(kws, ensure_ascii=False),
+                keywords=kws,
                 enabled=True, priority=10,
             ))
 
@@ -581,7 +593,7 @@ def seed_default_rules(db: Session = Depends(get_db), _: str = Depends(_require_
                 rule_name=f'{name} / {color} / {size}',
                 product_id=pid,
                 match_type='and',
-                keywords=json.dumps(kws, ensure_ascii=False),
+                keywords=kws,
                 enabled=True, priority=5,
             ))
 
@@ -672,9 +684,13 @@ async def backup_import(
                 _, dt, pid, qty, odt, storage, mall, orderer, recipient, phone, address, memo = row[:12]
                 if not dt or not pid or qty is None:
                     continue
+                # dt가 date 객체면 그대로, 문자열이면 파싱
+                date_val = dt if isinstance(dt, date_type) else date_type.fromisoformat(str(dt))
+                odt_str = str(odt).strip() if odt else ''
+                odate_val = date_type.fromisoformat(odt_str) if odt_str else None
                 db.add(Order(
-                    date=str(dt), product_id=int(pid), quantity=int(qty),
-                    order_date=str(odt or ''), storage=str(storage or '뉴페이스'),
+                    date=date_val, product_id=int(pid), quantity=int(qty),
+                    order_date=odate_val, storage=str(storage or '뉴페이스'),
                     mall=str(mall or ''), orderer=str(orderer or ''),
                     recipient=str(recipient or ''), phone=str(phone or ''),
                     address=str(address or ''), memo=str(memo or ''),
@@ -693,12 +709,13 @@ async def backup_import(
                 _, dt, pid, qty, type_val, notes = row[:6]
                 if not dt or not pid or qty is None:
                     continue
+                date_val = dt if isinstance(dt, date_type) else date_type.fromisoformat(str(dt))
                 try:
                     inv_type = InventoryType(str(type_val or 'normal'))
                 except ValueError:
                     inv_type = InventoryType.normal
                 db.add(InventoryItem(
-                    date=str(dt), product_id=int(pid), quantity=int(qty),
+                    date=date_val, product_id=int(pid), quantity=int(qty),
                     type=inv_type, notes=str(notes or ''),
                 ))
                 stats['inventory'] += 1
