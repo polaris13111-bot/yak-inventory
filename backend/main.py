@@ -1,12 +1,9 @@
-import asyncio
 import json
 import os
-import re
-import shutil
 from io import BytesIO
 from pathlib import Path
 from datetime import datetime, timedelta, date as date_type
-from fastapi import FastAPI, HTTPException, Depends, Request, UploadFile, File, Form, Header
+from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
 from fastapi.responses import FileResponse, StreamingResponse
@@ -25,7 +22,10 @@ _JWT_ALG     = 'HS256'
 _TOKEN_EXP_H = int(os.getenv('TOKEN_EXPIRE_HOURS', '24'))  # 기본 24h, 영구기기는 87600 (10년)
 _ADMIN_PW    = os.getenv('ADMIN_PASSWORD',  'newface')
 _VIEWER_PW   = os.getenv('VIEWER_PASSWORD', 'blackyak')
-_BACKUP_TOKEN = os.getenv('BACKUP_TOKEN', '')  # Cloud Scheduler 전용 토큰
+_BACKUP_TOKEN = os.getenv('BACKUP_TOKEN', '')
+_APP_NAME     = os.getenv('APP_NAME',  '야크 재고관리')
+_APP_SUB      = os.getenv('APP_SUB',   '블랙야크 위탁판매')
+_APP_THEME    = os.getenv('APP_THEME', 'blue')   # 'blue'=야크  'green'=창고
 
 def _create_token(role: str) -> str:
     exp = datetime.utcnow() + timedelta(hours=_TOKEN_EXP_H)
@@ -46,101 +46,33 @@ def _require_admin(role: str = Depends(_verify_token)) -> str:
     return role
 
 init_db()
-with ENGINE.connect() as _conn:
-    for _stmt in [
-        'ALTER TABLE products ADD COLUMN active INTEGER DEFAULT 1',
-        "ALTER TABLE products ADD COLUMN barcode TEXT DEFAULT ''",
-    ]:
-        try:
-            _conn.execute(text(_stmt))
-            _conn.commit()
-        except Exception:
-            pass  # column already exists
 SessionLocal = sessionmaker(bind=ENGINE)
 
-# ── 날짜 자동 마이그레이션: M.DD → YYYY-MM-DD ────────────
-_DATE_OLD = re.compile(r'^(\d{1,2})\.(\d{2})$')
-
-def _migrate_dates():
-    """기존 M.DD 형식 날짜를 YYYY-MM-DD 로 일괄 변환 (앱 시작 시 1회)."""
-    db = SessionLocal()
-    try:
-        # 구 형식(M.DD) 날짜가 없으면 즉시 종료 — 정상 운영 중엔 매번 스킵
-        has_old = (
-            db.query(Order).filter(Order.date.like('%.%')).first() is not None or
-            db.query(InventoryItem).filter(InventoryItem.date.like('%.%')).first() is not None
-        )
-        if not has_old:
-            return
-        year = datetime.now().year
-        changed = 0
-        for model in (Order, InventoryItem):
-            for row in db.query(model).all():
-                m = _DATE_OLD.match(row.date or '')
-                if m:
-                    row.date = f'{year}-{int(m.group(1)):02d}-{int(m.group(2)):02d}'
-                    changed += 1
-        if changed:
-            db.commit()
-            _sync_db()
-            print(f'[migrate] 날짜 {changed}건 변환 완료 → YYYY-MM-DD')
-    except Exception as e:
-        print(f'[migrate] 실패: {e}')
-    finally:
-        db.close()
-
-# ── GCS 동기화: 쓰기 후 /tmp/yak.db → /data/yak.db 복사 ──
-def _sync_db():
-    """쓰기 작업 완료 후 /tmp DB를 GCS FUSE(/data)로 동기화."""
-    if os.path.exists('/tmp/yak.db') and os.path.isdir('/data'):
-        try:
-            shutil.copy2('/tmp/yak.db', '/data/yak.db')
-        except Exception as e:
-            print(f'[sync] {e}')
-
 # ── 시드 데이터 (DB가 비어있을 때 상품 자동 등록) ─────────
-def _do_seed(db):
+def _seed_products():
     _seed_file = Path(__file__).parent / 'seed_products.json'
     if not _seed_file.exists():
-        return 0
-    data = json.loads(_seed_file.read_text(encoding='utf-8'))
-    for p in data:
-        db.add(Product(
-            name=p['name'], color=p['color'],
-            size=p['size'], model_code=p.get('model_code')
-        ))
-    db.commit()
-    return len(data)
-
-def _seed_products():
+        return
     try:
         db = SessionLocal()
         try:
             if db.query(Product).count() == 0:
-                n = _do_seed(db)
-                print(f'[seed] 상품 {n}개 등록 완료')
-                _sync_db()  # 최초 시드 후 GCS에 반영
+                data = json.loads(_seed_file.read_text(encoding='utf-8'))
+                for p in data:
+                    db.add(Product(
+                        name=p['name'], color=p['color'],
+                        size=p['size'], model_code=p.get('model_code')
+                    ))
+                db.commit()
+                print(f'[seed] 상품 {len(data)}개 등록 완료')
         finally:
             db.close()
     except Exception as e:
         print(f'[seed] 실패: {e}')
 
-# _seed_products() 는 고객사별 빈 DB 배포 후 백업·복원으로 초기 데이터 주입
-# seed_products.json 이 존재할 때만 동작하므로, 파일 없으면 자동 스킵됨
 _seed_products()
-_migrate_dates()
 
 app = FastAPI(title='야크 재고관리 API')
-
-# ── GCS 동기화 미들웨어: POST/PUT/DELETE 완료 후 동기 sync ──
-_NO_SYNC_PATHS = {'/auth/login', '/backup/auto', '/backup/export'}
-
-@app.middleware('http')
-async def _gcs_sync_middleware(request: Request, call_next):
-    response = await call_next(request)
-    if request.method in ('POST', 'PUT', 'DELETE', 'PATCH') and request.url.path not in _NO_SYNC_PATHS:
-        await asyncio.to_thread(_sync_db)
-    return response
 
 app.add_middleware(
     CORSMiddleware,
@@ -260,6 +192,11 @@ class LoginIn(BaseModel):
 
 
 # ─── 인증 ────────────────────────────────────────────────
+
+@app.get('/config')
+def get_config():
+    return {'app_name': _APP_NAME, 'app_sub': _APP_SUB, 'app_theme': _APP_THEME}
+
 
 @app.post('/auth/login')
 def login(data: LoginIn):
@@ -668,44 +605,6 @@ def seed_default_rules(db: Session = Depends(get_db), _: str = Depends(_require_
 
 
 # ─── 백업 / 복원 ─────────────────────────────────────────────
-
-@app.post('/backup/auto')
-def backup_auto(x_backup_token: Optional[str] = Header(None)):
-    """
-    Cloud Scheduler가 매일 새벽 호출 → /data/backup/ 폴더에 날짜별 DB 스냅샷 저장.
-    BACKUP_TOKEN 환경변수로 인증 (일반 JWT와 별도).
-    X-Backup-Token 헤더 사용 (Authorization 헤더는 Cloud Scheduler가 override함).
-    """
-    # 토큰 검증
-    if not _BACKUP_TOKEN:
-        raise HTTPException(503, 'BACKUP_TOKEN 환경변수가 설정되지 않았습니다')
-    if not x_backup_token or x_backup_token != _BACKUP_TOKEN:
-        raise HTTPException(401, '백업 토큰이 유효하지 않습니다')
-
-    # 실제 DB 경로 (SQLAlchemy ENGINE URL에서 추출)
-    src = Path(ENGINE.url.database)
-    if not src.exists():
-        raise HTTPException(503, f'{src} 파일이 없습니다')
-
-    backup_dir = Path('/data/backup')
-    try:
-        backup_dir.mkdir(parents=True, exist_ok=True)
-        stamp = datetime.now().strftime('%Y%m%d_%H%M%S')
-        dst = backup_dir / f'yak_{stamp}.db'
-        shutil.copy2(str(src), str(dst))
-
-        # 30일 이상 된 백업 자동 삭제
-        cutoff = datetime.now().timestamp() - 30 * 86400
-        removed = 0
-        for old in backup_dir.glob('yak_*.db'):
-            if old.stat().st_mtime < cutoff:
-                old.unlink()
-                removed += 1
-
-        return {'ok': True, 'saved': str(dst), 'removed_old': removed}
-    except Exception as e:
-        raise HTTPException(500, f'백업 실패: {e}')
-
 
 @app.get('/backup/export')
 def backup_export(db: Session = Depends(get_db)):

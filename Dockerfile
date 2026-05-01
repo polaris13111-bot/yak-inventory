@@ -19,7 +19,7 @@ RUN VITE_API_URL="" \
 FROM python:3.11-slim
 WORKDIR /app
 
-RUN apt-get update && apt-get install -y --no-install-recommends gcc \
+RUN apt-get update && apt-get install -y --no-install-recommends gcc libpq-dev \
     && rm -rf /var/lib/apt/lists/*
 
 COPY backend/requirements.txt .
@@ -29,9 +29,6 @@ COPY backend/ .
 
 # React 빌드 결과 → static/ 폴더로 복사
 COPY --from=frontend-build /frontend/dist ./static
-
-# SQLite DB 디렉토리 (Cloud Run GCS 볼륨 마운트 위치)
-RUN mkdir -p /data
 
 ENV PORT=8080
 EXPOSE 8080

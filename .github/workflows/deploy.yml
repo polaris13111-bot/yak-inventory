@@ -81,9 +81,8 @@ jobs:
             --cpu 1 \
             --min-instances 1 \
             --max-instances 1 \
-            --set-env-vars "^|^DATABASE_URL=sqlite:////data/yak.db|JWT_SECRET=${{ secrets.YAK_JWT_SECRET }}|ADMIN_PASSWORD=${{ secrets.YAK_ADMIN_PASSWORD }}|VIEWER_PASSWORD=${{ secrets.YAK_VIEWER_PASSWORD }}|BACKUP_TOKEN=${{ secrets.YAK_BACKUP_TOKEN }}|APP_NAME=야크 재고관리|APP_SUB=블랙야크 위탁판매" \
-            --add-volume=name=db-vol,type=cloud-storage,bucket=${{ env.BUCKET }} \
-            --add-volume-mount=volume=db-vol,mount-path=/data \
+            --add-cloudsql-instances=blackyak-493519:asia-northeast3:nf-db \
+            --set-env-vars "^|^DATABASE_URL=postgresql+psycopg2://postgres:${{ secrets.CLOUD_SQL_PASSWORD }}@/yak_app?host=/cloudsql/blackyak-493519:asia-northeast3:nf-db|JWT_SECRET=${{ secrets.YAK_JWT_SECRET }}|ADMIN_PASSWORD=${{ secrets.YAK_ADMIN_PASSWORD }}|VIEWER_PASSWORD=${{ secrets.YAK_VIEWER_PASSWORD }}|BACKUP_TOKEN=${{ secrets.YAK_BACKUP_TOKEN }}|APP_NAME=야크 재고관리|APP_SUB=블랙야크 위탁판매|APP_THEME=blue" \
             --quiet
 
 
@@ -119,7 +118,6 @@ jobs:
             --cpu 1 \
             --min-instances 1 \
             --max-instances 1 \
-            --set-env-vars "^|^DATABASE_URL=sqlite:////data/yak.db|JWT_SECRET=${{ secrets.WAREHOUSE_JWT_SECRET }}|ADMIN_PASSWORD=${{ secrets.WAREHOUSE_ADMIN_PASSWORD }}|VIEWER_PASSWORD=${{ secrets.WAREHOUSE_VIEWER_PASSWORD }}|BACKUP_TOKEN=${{ secrets.WAREHOUSE_BACKUP_TOKEN }}|TOKEN_EXPIRE_HOURS=87600|APP_NAME=창고 재고관리|APP_SUB=뉴페이스" \
-            --add-volume=name=db-vol,type=cloud-storage,bucket=${{ env.BUCKET }} \
-            --add-volume-mount=volume=db-vol,mount-path=/data \
+            --add-cloudsql-instances=blackyak-493519:asia-northeast3:nf-db \
+            --set-env-vars "^|^DATABASE_URL=postgresql+psycopg2://postgres:${{ secrets.CLOUD_SQL_PASSWORD }}@/warehouse_app?host=/cloudsql/blackyak-493519:asia-northeast3:nf-db|JWT_SECRET=${{ secrets.WAREHOUSE_JWT_SECRET }}|ADMIN_PASSWORD=${{ secrets.WAREHOUSE_ADMIN_PASSWORD }}|VIEWER_PASSWORD=${{ secrets.WAREHOUSE_VIEWER_PASSWORD }}|BACKUP_TOKEN=${{ secrets.WAREHOUSE_BACKUP_TOKEN }}|TOKEN_EXPIRE_HOURS=87600|APP_NAME=창고 재고관리|APP_SUB=뉴페이스|APP_THEME=green" \
             --quiet

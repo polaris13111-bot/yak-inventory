@@ -3,3 +3,4 @@ sqlalchemy>=2.0
 uvicorn[standard]>=0.30
 openpyxl>=3.1
 python-jose[cryptography]>=3.3
+psycopg2-binary>=2.9
