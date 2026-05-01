@@ -144,18 +144,8 @@ function BottomNav({ onAdminToggle, isAdmin, isViewer, theme }: { onAdminToggle:
 function themeActive(theme: 'blue' | 'green') {
   return theme === 'green' ? 'bg-green-50 text-green-700' : 'bg-blue-50 text-blue-700'
 }
-function themeHover(theme: 'blue' | 'green') {
-  return theme === 'green'
-    ? 'text-slate-600 hover:bg-green-50/60 hover:text-green-700'
-    : 'text-slate-600 hover:bg-slate-50 hover:text-slate-800'
-}
 function themeMobileActive(theme: 'blue' | 'green') {
   return theme === 'green' ? 'text-green-600' : 'text-blue-600'
-}
-function themeSidebarBorder(theme: 'blue' | 'green') {
-  return theme === 'green'
-    ? 'border-l-4 border-green-400 bg-green-600'
-    : 'border-l-4 border-blue-400 bg-blue-600'
 }
 
 // ─── 사이드바 + 레이아웃 ──────────────────────────────────
