@@ -8,8 +8,6 @@ import os
 Base = declarative_base()
 
 # ── DB 연결 ───────────────────────────────────────────────────
-# Cloud Run: postgresql+psycopg2://user:pw@/dbname?host=/cloudsql/PROJECT:REGION:INSTANCE
-# 로컬 개발: postgresql+psycopg2://user:pw@localhost:5432/dbname
 _db_url = os.getenv('DATABASE_URL', 'sqlite:///./yak.db')
 
 if _db_url.startswith('sqlite'):
@@ -23,15 +21,21 @@ else:
         max_overflow=10,
     )
 
+# APP_SCHEMA: 같은 이미지를 yak/warehouse 양쪽에 배포할 때
+# Cloud Run 환경변수로 구분 (기본값 yak)
+_SCHEMA = None if _db_url.startswith('sqlite') else os.getenv('APP_SCHEMA', 'yak')
+
 
 class InventoryType(str, enum.Enum):
-    normal    = 'normal'     # 정상 입고
-    returned  = 'return'     # 변심반품 입고
-    defective = 'defective'  # 불량 입고 (현재고 제외)
+    normal    = 'normal'
+    returned  = 'return'
+    defective = 'defective'
 
 
 class Product(Base):
     __tablename__ = 'products'
+    # public 스키마 — yak/warehouse 공용 카탈로그 (스키마 없음)
+
     id          = Column(Integer, primary_key=True, autoincrement=True)
     name        = Column(String, nullable=False)
     color       = Column(String, nullable=False)
@@ -45,6 +49,8 @@ class Product(Base):
 
 class Order(Base):
     __tablename__ = 'orders'
+    __table_args__ = ({'schema': _SCHEMA} if _SCHEMA else {})
+
     id          = Column(Integer, primary_key=True, autoincrement=True)
     date        = Column(Date, nullable=False)
     product_id  = Column(Integer, ForeignKey('products.id'), nullable=False)
@@ -63,11 +69,13 @@ class Order(Base):
 
 class InventoryItem(Base):
     __tablename__ = 'inventory'
+    __table_args__ = ({'schema': _SCHEMA} if _SCHEMA else {})
+
     id          = Column(Integer, primary_key=True, autoincrement=True)
     date        = Column(Date, nullable=False)
     product_id  = Column(Integer, ForeignKey('products.id'), nullable=False)
     quantity    = Column(Integer, nullable=False)
-    type        = Column(Enum(InventoryType), default=InventoryType.normal)
+    type        = Column(Enum(InventoryType, name='inventorytype', schema='public'), default=InventoryType.normal)
     notes       = Column(String, default='')
     created_at  = Column(DateTime, default=datetime.now)
     product     = relationship('Product', back_populates='inventories')
@@ -75,11 +83,13 @@ class InventoryItem(Base):
 
 class MappingRule(Base):
     __tablename__ = 'mapping_rules'
+    __table_args__ = ({'schema': _SCHEMA} if _SCHEMA else {})
+
     id          = Column(Integer, primary_key=True, autoincrement=True)
     rule_name   = Column(String, default='')
     product_id  = Column(Integer, ForeignKey('products.id'), nullable=False)
     match_type  = Column(String, default='and')
-    keywords    = Column(JSONB, default=list)      # ['키워드1', '키워드2']
+    keywords    = Column(JSONB, default=list)
     enabled     = Column(Boolean, default=True)
     priority    = Column(Integer, default=0)
     created_at  = Column(DateTime, default=datetime.now)
