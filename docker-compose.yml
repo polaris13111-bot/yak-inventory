@@ -11,4 +11,9 @@ services:
     environment:
       - DATABASE_URL=${DATABASE_URL}
       - APP_SCHEMA=${APP_SCHEMA:-warehouse}
+      - JWT_SECRET=${JWT_SECRET:-warehouse-jwt-secret-local}
+      - ADMIN_PASSWORD=${ADMIN_PASSWORD:-newface}
+      - VIEWER_PASSWORD=${VIEWER_PASSWORD:-blackyak}
+      - APP_NAME=${APP_NAME:-창고 재고관리}
+      - APP_THEME=${APP_THEME:-green}
     restart: unless-stopped

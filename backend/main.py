@@ -3,7 +3,7 @@ import os
 import calendar
 from io import BytesIO
 from pathlib import Path
-from datetime import datetime, timedelta, date as date_type
+from datetime import datetime, timedelta, date as date_type, timezone
 from fastapi import FastAPI, HTTPException, Depends, UploadFile, File, Form, Header
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.staticfiles import StaticFiles
@@ -30,7 +30,7 @@ _APP_SUB      = os.getenv('APP_SUB',   '블랙야크 위탁판매')
 _APP_THEME    = os.getenv('APP_THEME', 'blue')   # 'blue'=야크  'green'=창고
 
 def _create_token(role: str) -> str:
-    exp = datetime.utcnow() + timedelta(hours=_TOKEN_EXP_H)
+    exp = datetime.now(timezone.utc) + timedelta(hours=_TOKEN_EXP_H)
     return jwt.encode({'sub': role, 'exp': exp}, _JWT_SECRET, algorithm=_JWT_ALG)
 
 def _verify_token(authorization: Optional[str] = Header(None)) -> str:
@@ -617,7 +617,7 @@ def seed_default_rules(db: Session = Depends(get_db), _: str = Depends(_require_
                 rule_name=f'H미토 윈드자켓 / 블랙 / {size}',
                 product_id=pid,
                 match_type='and',
-                keywords=json.dumps(['미토', '블랙', size], ensure_ascii=False),
+                keywords=['미토', '블랙', size],
                 enabled=True, priority=5,
             ))
 
